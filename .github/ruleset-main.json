@@ -10,7 +10,13 @@
       ]
     }
   },
-  "bypass_actors": [],
+  "bypass_actors": [
+    {
+      "actor_id": null,
+      "actor_type": "OrganizationAdmin",
+      "bypass_mode": "always"
+    }
+  ],
   "rules": [
     {
       "type": "deletion"
