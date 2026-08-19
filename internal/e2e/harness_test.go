@@ -328,8 +328,11 @@ func TestInstalledConfigIsTheEmbeddedOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(p.Result), harness.HookCommand()) {
-		t.Error("the installed settings do not contain the embedded command")
+	// The command installed is the embedded one with its bare `pawl` resolved to
+	// an absolute path (AC18), so assert the arguments rather than the whole
+	// string.
+	if !strings.Contains(string(p.Result), "hook claude-code") {
+		t.Error("the installed settings do not carry the embedded command's arguments")
 	}
 	// What is installed must be exactly what ships, not an assembled copy.
 	if !strings.Contains(string(p.Result), "Edit|Write|MultiEdit") {
@@ -479,5 +482,89 @@ func TestUninstallRemovesBothBindings(t *testing.T) {
 	}
 	if strings.Contains(string(u.Result), "pawl hook") {
 		t.Errorf("uninstall left a binding behind: %s", u.Result)
+	}
+}
+
+// TestInstallWritesAnAbsolutePath is PAWL-019 AC18. A bare `pawl` resolves only
+// if pawl is on the PATH the harness hands its hooks, which it was not.
+func TestInstallWritesAnAbsolutePath(t *testing.T) {
+	home := t.TempDir()
+	p, err := harness.Install(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(p.Result), `"command": "pawl hook`) {
+		t.Error("a bare command name was installed; it resolves only on the " +
+			"harness's PATH and fails silently when it does not")
+	}
+	// Assert absoluteness, not the binary's name: under test the running
+	// executable is the test binary, and in the wild pawl may be installed
+	// under any name.
+	found := false
+	for _, line := range strings.Split(string(p.Result), "\n") {
+		if !strings.Contains(line, "hook claude-code") {
+			continue
+		}
+		cmd := strings.TrimSpace(strings.SplitN(line, `": "`, 2)[1])
+		if strings.HasPrefix(cmd, "/") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no absolute path in the installed settings:\n%s", p.Result)
+	}
+}
+
+// TestInstallRepairsAnOutdatedEntry is AC21. Without it, idempotency is a trap:
+// a broken entry is recognised as ours, skipped as already installed, and never
+// fixed.
+func TestInstallRepairsAnOutdatedEntry(t *testing.T) {
+	home := t.TempDir()
+	// An installation from an older pawl, naming a bare command.
+	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"matcher":"Edit|Write|MultiEdit",
+	  "hooks":[{"type":"command","command":"pawl hook claude-code"}]}]}}`)
+
+	p, err := harness.Install(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.AlreadySet {
+		t.Fatal("an entry naming a different command must be repaired, not skipped")
+	}
+	if strings.Contains(string(p.Result), `"command": "pawl hook claude-code"`) {
+		t.Error("the stale bare-path entry survived the repair")
+	}
+
+	// AC3 still holds: installing again from the same binary changes nothing.
+	if err := p.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	again, err := harness.Install(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.AlreadySet {
+		t.Error("a second install from the same binary must still be a no-op")
+	}
+}
+
+// TestCheckReportsABrokenInstallation is AC19 and AC20 — the diagnostic that
+// tells a broken installation apart from a working one with nothing to say.
+func TestCheckReportsABrokenInstallation(t *testing.T) {
+	home := t.TempDir()
+
+	if r := harness.Check(home); r.Installed {
+		t.Error("nothing is installed yet")
+	}
+
+	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"matcher":"Edit",
+	  "hooks":[{"type":"command","command":"/nonexistent/pawl hook claude-code"}]}]}}`)
+	r := harness.Check(home)
+	if !r.Installed {
+		t.Fatal("the configuration is present and should be reported as installed")
+	}
+	if len(r.Working) != 1 || r.Working[0] {
+		t.Error("a command that cannot be run must be reported as not working; " +
+			"otherwise a broken install is indistinguishable from a quiet one")
 	}
 }

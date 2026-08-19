@@ -13,7 +13,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -39,7 +41,10 @@ var claudeCodeConfig []byte
 // by uninstall. A separately declared constant would be a second source of truth
 // for "which entry is ours", and the failure when the two disagree is an
 // uninstall that silently leaves a hook in place.
-const commandPrefix = "pawl hook "
+// commandArgs identifies pawl's entries by the arguments rather than the
+// binary path, because AC18 installs an absolute path and a prefix match on
+// "pawl " would then miss our own entry at uninstall time.
+const commandArgs = "hook claude-code"
 
 // HookCommand reports the first command pawl installs, for callers that want to
 // name it. Uninstall matches on the prefix instead.
@@ -64,7 +69,32 @@ func HookCommand() string {
 
 func isOurs(entry map[string]any) bool {
 	cmd, _ := entry["command"].(string)
-	return strings.HasPrefix(cmd, commandPrefix)
+	// Matched on the argument signature alone, not on the binary's name. A name
+	// check breaks the moment the binary is installed as anything else —
+	// `pawl-0.1.0`, a symlink, a test harness — and the failure mode is an
+	// uninstall that cannot find its own entry.
+	return strings.Contains(cmd, commandArgs)
+}
+
+// resolveCommand rewrites the embedded config's bare `pawl` into the absolute
+// path of the running binary (AC18).
+//
+// A bare name resolves only if pawl is on the PATH the harness hands its hooks,
+// which is not a login shell's PATH and not one a direnv-scoped install
+// provides. pawl knows where it is now; assuming the harness will find it later
+// is what failed silently.
+func resolveCommand(cmd string) string {
+	exe, err := os.Executable()
+	if err != nil {
+		return cmd
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	if rest, ok := strings.CutPrefix(cmd, "pawl "); ok {
+		return exe + " " + rest
+	}
+	return cmd
 }
 
 // config decodes the embedded configuration as event name -> groups. A fresh
@@ -220,20 +250,47 @@ func mutateEvent(hooks map[string]any, event string, ours []map[string]any, add 
 		return true
 	}
 
-	// Already installed? AC3: a second run is a no-op.
+	// Already installed? AC3 says a second run is a no-op — but only when the
+	// entry still names what we would install now. AC21: an entry naming a
+	// different command is repaired rather than skipped, or idempotency becomes
+	// a trap that recognises a broken entry as ours and never fixes it.
+	want := ""
+	if len(ours) > 0 {
+		if inner, ok := ours[0]["hooks"].([]any); ok && len(inner) > 0 {
+			if e, ok := inner[0].(map[string]any); ok {
+				want, _ = e["command"].(string)
+				want = resolveCommand(want)
+			}
+		}
+	}
 	for _, g := range existing {
 		group, _ := g.(map[string]any)
 		if group == nil {
 			continue
 		}
 		for _, h := range group["hooks"].([]any) {
-			if entry, ok := h.(map[string]any); ok && isOurs(entry) {
+			entry, ok := h.(map[string]any)
+			if !ok || !isOurs(entry) {
+				continue
+			}
+			if cmd, _ := entry["command"].(string); cmd == want {
 				return false
 			}
+			entry["command"] = want
+			return true
 		}
 	}
 
 	for _, g := range ours {
+		if inner, ok := g["hooks"].([]any); ok {
+			for _, h := range inner {
+				if entry, ok := h.(map[string]any); ok {
+					if cmd, ok := entry["command"].(string); ok {
+						entry["command"] = resolveCommand(cmd)
+					}
+				}
+			}
+		}
 		existing = append(existing, g)
 	}
 	hooks[event] = existing
@@ -259,4 +316,74 @@ func (p *Plan) Apply() error {
 		}
 	}
 	return os.WriteFile(p.Path, p.Result, 0o644)
+}
+
+// CheckResult is what a --check reports (AC20).
+type CheckResult struct {
+	Path      string
+	Installed bool
+	Commands  []string
+	Working   []bool
+	Problem   string
+}
+
+// Check reports whether an installation is present and whether the commands it
+// names actually run (AC19, AC20).
+//
+// This exists because AC10 requires the hook to stay silent on failure so it can
+// never break an edit loop — and the cost of that is a broken installation
+// looking exactly like a working one with nothing to say. Something has to tell
+// them apart, and it must not be the hook.
+func Check(home string) CheckResult {
+	r := CheckResult{Path: SettingsPath(home)}
+
+	b, err := os.ReadFile(r.Path)
+	if err != nil {
+		r.Problem = "no settings file: " + err.Error()
+		return r
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(b, &settings); err != nil {
+		r.Problem = "settings file is not valid JSON"
+		return r
+	}
+
+	hooks, _ := settings["hooks"].(map[string]any)
+	for _, groups := range hooks {
+		list, _ := groups.([]any)
+		for _, g := range list {
+			group, _ := g.(map[string]any)
+			if group == nil {
+				continue
+			}
+			inner, _ := group["hooks"].([]any)
+			for _, h := range inner {
+				entry, _ := h.(map[string]any)
+				if entry == nil || !isOurs(entry) {
+					continue
+				}
+				cmd, _ := entry["command"].(string)
+				r.Installed = true
+				r.Commands = append(r.Commands, cmd)
+				r.Working = append(r.Working, commandRuns(cmd))
+			}
+		}
+	}
+	if !r.Installed {
+		r.Problem = "pawl's hook is not in the settings"
+	}
+	return r
+}
+
+// commandRuns executes the installed command the way a harness would, and
+// reports whether it is even findable. An empty payload is a no-op for the hook
+// itself, so this tests reachability rather than behaviour.
+func commandRuns(cmd string) bool {
+	bin, rest, _ := strings.Cut(cmd, " ")
+	args := strings.Fields(rest)
+	c := exec.Command(bin, args...)
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	return c.Run() == nil
 }

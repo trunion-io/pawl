@@ -131,6 +131,38 @@ to script against it, and the next change to a harness protocol then breaks
 them. It is a diagnostic and an integration point, and the stable answer to
 "what is unaccounted?" is `pawl pending`.
 
+### An installation that does not work must not look like one that does
+
+**AC18** — The system shall install an absolute path to the running binary
+rather than a bare command name.
+`checkable: yes` (once built) — a bare `pawl` resolves only if pawl is on the
+PATH the harness happens to hand its hooks, which is not the PATH of a login
+shell and not the one a direnv-scoped install provides. pawl knows exactly where
+it is at install time; guessing that the harness will find it later is the kind
+of assumption that fails silently.
+
+**AC19** — When installing, the system shall run the command it is about to
+install and refuse to report success if it does not work.
+`checkable: yes` (once built) — an install that writes correct JSON naming a
+binary that cannot be found has done nothing, and said it succeeded.
+
+**AC20** — The system shall provide a way to check an existing installation,
+reporting whether the configuration is present *and* whether the command it
+names actually runs.
+`checkable: yes` (once built) — this is the diagnostic that was missing. AC10
+requires the hook to stay silent on failure so it can never break an edit loop,
+and the cost of that is a broken installation being indistinguishable from a
+working one with nothing to say. Something has to be able to tell them apart,
+and it must not be the hook itself.
+
+**AC21** — Where an entry pawl installed names a command different from the one
+it would install now, the system shall replace it.
+`checkable: yes` (once built) — otherwise idempotency becomes a trap: an
+existing broken entry is recognised as ours, skipped as "already installed", and
+never repaired. It also means moving or upgrading the binary silently leaves a
+configuration pointing at the old path. AC3 still holds — installing twice from
+the same binary changes nothing.
+
 ### The configuration ships in the binary
 
 **AC14** — The system shall hold the harness configuration it installs as a

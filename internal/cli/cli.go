@@ -879,6 +879,7 @@ func cmdSetup(args []string) int {
 	dryRun := fs.Bool("dry-run", false, "Show the resulting settings; write nothing.")
 	uninstall := fs.Bool("uninstall", false, "Remove pawl's hook, leaving everything else.")
 	dir := fs.String("dir", "", "Install into <dir>/.claude/settings.json. Defaults to your home directory.")
+	check := fs.Bool("check", false, "Report whether an installation is present and actually works.")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "usage: pawl setup claude [--dir <path>] [--dry-run] [--uninstall]")
 		fs.PrintDefaults()
@@ -901,6 +902,37 @@ func cmdSetup(args []string) int {
 		if err != nil {
 			return fail(err)
 		}
+	}
+
+	if *check {
+		r := harness.Check(base)
+		if !r.Installed {
+			fmt.Printf("not installed in %s\n", r.Path)
+			if r.Problem != "" {
+				fmt.Println("  " + r.Problem)
+			}
+			fmt.Println("\nInstall with: pawl setup claude")
+			return 1
+		}
+		fmt.Printf("installed in %s\n", r.Path)
+		broken := false
+		for i, cmd := range r.Commands {
+			status := "ok"
+			if !r.Working[i] {
+				status = "CANNOT RUN"
+				broken = true
+			}
+			fmt.Printf("  %-9s %s\n", status, cmd)
+		}
+		if broken {
+			fmt.Println()
+			fmt.Println("The configuration is present but a command cannot be run, so the")
+			fmt.Println("hook fails silently on every edit — which looks exactly like having")
+			fmt.Println("nothing to report. Re-run `pawl setup claude` to install an absolute")
+			fmt.Println("path to this binary.")
+			return 1
+		}
+		return 0
 	}
 
 	var p harness.Plan
@@ -935,6 +967,17 @@ func cmdSetup(args []string) int {
 		fmt.Printf("removed pawl's hook from %s\n", p.Path)
 	} else {
 		fmt.Printf("installed pawl's hook in %s\n", p.Path)
+		// AC19: an install that wrote correct JSON naming a binary nothing can
+		// find has done nothing, and said it succeeded.
+		if r := harness.Check(base); r.Installed {
+			for i, cmd := range r.Commands {
+				if !r.Working[i] {
+					fmt.Fprintf(os.Stderr, "\nWARNING: the installed command cannot be run:\n  %s\n", cmd)
+					fmt.Fprintln(os.Stderr, "The hook would fail silently on every edit. Check the path above.")
+					return 1
+				}
+			}
+		}
 	}
 	if p.Backup != "" {
 		fmt.Printf("previous settings backed up to %s\n", p.Backup)
