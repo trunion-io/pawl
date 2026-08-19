@@ -255,9 +255,12 @@ func cmdAck(args []string) int {
 		identity = fs.String("identity", "", "Human identity for expert/client roles.")
 		session  = fs.String("session", "", "Session identifier.")
 		repo     = fs.String("repo", ".", "Repository root.")
+		auto     = fs.Bool("auto", false, "Apply deterministic rules from .pawl/policy.toml instead of taking --path/--lines.")
+		dryRun   = fs.Bool("dry-run", false, "With --auto: report what the rules match, record nothing.")
 	)
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "usage: pawl ack --path <file> --lines <a-b> [options]")
+		fmt.Fprintln(fs.Output(), "       pawl ack --auto [--dry-run]")
 		fmt.Fprintln(fs.Output(), "\nRecords that a changed span carries nothing to assume.")
 		fmt.Fprintln(fs.Output(), "It is not a claim, and it does not clear a span on evidence —")
 		fmt.Fprintln(fs.Output(), "acknowledged spans are sampled for review.")
@@ -265,6 +268,9 @@ func cmdAck(args []string) int {
 	}
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *auto {
+		return cmdAckAuto(*repo, *dryRun, *harness, *modelStr, *session)
 	}
 	if *path == "" || *lines == "" {
 		fs.Usage()
@@ -309,6 +315,7 @@ func cmdPending(args []string) int {
 		repo   = fs.String("repo", ".", "Repository root.")
 		asJSON = fs.Bool("json", false, "Emit pending spans as JSON.")
 		quiet  = fs.Bool("quiet", false, "Print nothing; exit 0 regardless.")
+		once   = fs.Bool("once", false, "Stay silent if this exact pending set was already surfaced.")
 	)
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "usage: pawl pending [--repo .] [--json] [<file>...]")
@@ -331,6 +338,17 @@ func cmdPending(args []string) int {
 	spans, err := resolve.Pending(*repo, claims, acks, fs.Args())
 	if err != nil {
 		return pendingSoftFail(err, *quiet)
+	}
+
+	// AC14: an agent editing the same file repeatedly should not be told the
+	// same thing each time. The cache decides only whether to speak; it never
+	// changes what is reported (AC17).
+	if *once && len(fs.Args()) == 1 {
+		file := fs.Args()[0]
+		if resolve.AlreadySurfaced(*repo, file, spans) {
+			return 0
+		}
+		resolve.MarkSurfaced(*repo, file, spans)
 	}
 
 	if *quiet {
@@ -443,6 +461,73 @@ func cmdPrune(args []string) int {
 		// to prevent.
 		fmt.Printf("%d not present as record files (legacy log entries are left alone)\n", len(skipped))
 	}
+	return 0
+}
+
+// cmdAckAuto applies the client's deterministic rules (PAWL-017 AC1).
+//
+// Rules can only ever acknowledge — say there was nothing to assume. They can
+// never claim (AC3). Every record it writes carries the rule that produced it,
+// so a rule that turns out to be wrong is traceable to its records (AC7).
+func cmdAckAuto(repo string, dryRun bool, harness, modelName, session string) int {
+	pol, err := policy.Load(repo)
+	if err != nil {
+		return fail(err)
+	}
+	if pol.Accounting.Empty() {
+		fmt.Println("no acknowledgement rules configured; add an [accounting] table to .pawl/policy.toml")
+		return 0
+	}
+
+	claims, err := claimlog.Load(repo)
+	if err != nil {
+		return fail(err)
+	}
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		return fail(err)
+	}
+	spans, err := resolve.Pending(repo, claims, acks, nil)
+	if err != nil {
+		return fail(err)
+	}
+
+	matches := resolve.AutoAck(repo, spans, pol.Accounting)
+	if len(matches) == 0 {
+		fmt.Println("no pending spans matched a rule")
+		return 0
+	}
+
+	if dryRun {
+		fmt.Printf("%d span(s) would be acknowledged by rule:\n", len(matches))
+		for _, m := range matches {
+			fmt.Printf("  %s:%d-%d  [%s]\n", m.Path, m.StartLine, m.EndLine, m.Rule)
+		}
+		return 0
+	}
+
+	byRule := map[string]int{}
+	for _, m := range matches {
+		path, start, end, origin, rule := resolve.RuleAcknowledgement(m)
+		if _, err := claimlog.RecordAck(repo, claimlog.AckOptions{
+			Path: path, StartLine: start, EndLine: end,
+			Author:  &model.Author{Role: model.RoleAgent, Harness: harness, Model: modelName},
+			Session: session,
+			Origin:  origin,
+			Rule:    rule,
+		}); err != nil {
+			return fail(err)
+		}
+		byRule[rule]++
+	}
+
+	fmt.Printf("acknowledged %d span(s) by rule:\n", len(matches))
+	for rule, n := range byRule {
+		fmt.Printf("  %-24s %d\n", rule, n)
+	}
+	fmt.Println()
+	fmt.Println("These were recorded, not skipped — they are sampled like any other")
+	fmt.Println("acknowledgement, so a wrong rule surfaces as a false clear.")
 	return 0
 }
 

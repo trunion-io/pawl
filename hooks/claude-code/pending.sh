@@ -44,7 +44,7 @@ else
   emit_nothing
 fi
 
-spans=$(cd "$repo" && "$pawl" pending --json --repo . "$rel" 2>/dev/null) || emit_nothing
+spans=$(cd "$repo" && "$pawl" pending --json --once --repo . "$rel" 2>/dev/null) || emit_nothing
 [ -n "$spans" ] || emit_nothing
 
 count=$(printf '%s' "$spans" | jq 'length' 2>/dev/null) || emit_nothing
@@ -64,22 +64,11 @@ fi
 
 # `spec:` cannot resolve until the spec tool exists (PAWL-009), so a claim citing
 # it would be permanently unverified. AC10: do not suggest it.
-context=$(cat <<EOF
-pawl: ${count} span(s), ${lines} line(s) in ${rel} carry no claim or acknowledgement yet.
-
-  ${ranges}
-
-Account for them now, while the reasoning is still in context — recording this
-later against a finished diff is reconstruction, which is what C-2 forbids.
-
-  pawl claim "<what you assumed>" --path <file> --lines <a-b> [--verified-by test:<TestName>]
-  pawl ack --path <file> --lines <a-b>     # nothing to assume here
-
-Use ack freely for mechanical edits; it is cheap and it is measured. Use claim
-when you assumed something, rejected an alternative, or could not establish
-something and proceeded anyway.
-EOF
-)
+# AC12: the standing instructions are NOT repeated here. How to claim is
+# standing context and lives in CLAUDE.md; repeating it on every edit was 127 of
+# the 159 tokens this used to cost, four fifths of the message being the same
+# sentences over and over.
+context="pawl: ${count} unaccounted span(s), ${lines} line(s) in ${rel} — ${ranges}"
 
 jq -cn --arg ctx "$context" \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'

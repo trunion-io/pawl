@@ -73,6 +73,8 @@ type Options struct {
 	Author     *model.Author
 	Session    string
 	Ticket     string
+	Origin     model.RecordOrigin
+	Cost       *model.Cost
 }
 
 // Record is the emitter entry point, called from a harness hook at the moment of
@@ -112,6 +114,17 @@ func Record(repo string, opts Options) (model.Claim, error) {
 	if opts.Author != nil {
 		author = *opts.Author
 	}
+	// A rule may never produce a claim (PAWL-017 AC3). A rule does not know
+	// what was assumed, and a fabricated assumption is worse than an absent one.
+	origin := opts.Origin
+	if origin == "" {
+		origin = model.OriginAgent
+	}
+	if origin == model.OriginRule {
+		return model.Claim{}, fmt.Errorf(
+			"a claim cannot be produced by a rule: rules may record that there " +
+				"was nothing to assume, never what was assumed")
+	}
 	verifiedBy := opts.VerifiedBy
 	if verifiedBy == nil {
 		verifiedBy = []model.EvidenceRef{}
@@ -131,6 +144,8 @@ func Record(repo string, opts Options) (model.Claim, error) {
 		Author:        author,
 		Session:       opts.Session,
 		Ticket:        opts.Ticket,
+		Origin:        origin,
+		Cost:          opts.Cost,
 	}
 	return Append(repo, claim)
 }

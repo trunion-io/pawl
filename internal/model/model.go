@@ -162,6 +162,43 @@ func SplitLines(s string) []string {
 	return strings.Split(s, "\n")
 }
 
+// RecordOrigin is what mechanism produced a record (PAWL-017 AC6).
+//
+// Distinct from Author.Role, which says who the work is attributed to. A rule
+// firing on a vendored path produces a record with OriginRule and no meaningful
+// author; an agent recording an assumption produces OriginAgent. Conflating the
+// two would make "who decided this needed no review" unanswerable.
+//
+// The empty value means unrecorded, which is what records written before this
+// field existed carry. It is reported as unrecorded rather than assumed to be
+// an agent, because assuming is what this codebase does not do.
+type RecordOrigin string
+
+const (
+	OriginAgent RecordOrigin = "agent"
+	OriginHuman RecordOrigin = "human"
+	OriginRule  RecordOrigin = "rule"
+)
+
+// Cost is optional, self-reported provenance about what producing a record cost
+// (PAWL-017 AC9).
+//
+// It sits with TS, Harness and Model — all self-reported, none verified. The
+// distinction that admits it: a claim's Text is a statement about the code and
+// must be verifiable; this is metadata about the record's production, which C-1
+// has nothing to say about.
+//
+// The gate never reads it (AC10). A verdict that depends on cost pays an agent
+// to claim less, and under-claiming is the failure this tool exists to catch.
+type Cost struct {
+	Tokens int `json:"tokens"`
+	// Scope names what was counted. Required, because "tokens" alone is mush:
+	// composing the claim text, the hook round trip and the edit that produced
+	// the span are three different numbers, and a corpus mixing them measures
+	// nothing.
+	Scope string `json:"scope"`
+}
+
 // Claim is a single statement bound to a span of source.
 type Claim struct {
 	SchemaVersion string        `json:"schema_version"`
@@ -177,6 +214,8 @@ type Claim struct {
 	Author        Author        `json:"author"`
 	Session       string        `json:"session,omitempty"`
 	Ticket        string        `json:"ticket,omitempty"`
+	Origin        RecordOrigin  `json:"origin,omitempty"`
+	Cost          *Cost         `json:"cost,omitempty"`
 }
 
 func (c Claim) Overlaps(path string, start, end int) bool {
@@ -210,9 +249,15 @@ type Acknowledgement struct {
 	// the code it covered has since changed, the acknowledgement no longer
 	// describes delivered code and the span falls back to unaccounted — C-4
 	// applies here for the same reason it applies to claims.
-	Fingerprint string `json:"fingerprint"`
-	Author      Author `json:"author"`
-	Session     string `json:"session,omitempty"`
+	Fingerprint string       `json:"fingerprint"`
+	Author      Author       `json:"author"`
+	Session     string       `json:"session,omitempty"`
+	Origin      RecordOrigin `json:"origin,omitempty"`
+	// Rule names the rule that produced this, where Origin is OriginRule (AC7).
+	// Without it a rule that turns out to be wrong cannot be traced to the
+	// records it produced, and the corpus cannot be corrected.
+	Rule string `json:"rule,omitempty"`
+	Cost *Cost  `json:"cost,omitempty"`
 }
 
 type AnchorStatus string
@@ -327,6 +372,14 @@ type Summary struct {
 	// and it is available immediately, long before the PAWL-007 sampler has a
 	// corpus large enough to say anything.
 	AcknowledgementRatio float64 `json:"acknowledgement_ratio"`
+
+	// Verifiable cost proxies (AC11) — measured by pawl from records it holds,
+	// needing nobody's self-report. A checkable floor under an unverifiable
+	// token count.
+	ClaimTextBytes int `json:"claim_text_bytes"`
+	// RuleProducedRecords counts records pawl produced itself, and is therefore
+	// the one cost signal it can verify (AC8).
+	RuleProducedRecords int `json:"rule_produced_records"`
 }
 
 // ReadingList is the output that matters: the minimum set of lines a human must
@@ -377,10 +430,14 @@ func (r ReadingList) Summary() Summary {
 		reduction = round1(100 * (1 - float64(mustRead)/float64(changed)))
 	}
 
-	needing := 0
+	needing, textBytes, byRule := 0, 0, 0
 	for _, c := range r.Claims {
 		if c.NeedsHuman() {
 			needing++
+		}
+		textBytes += len(c.Claim.Text)
+		if c.Claim.Origin == OriginRule {
+			byRule++
 		}
 	}
 	unclaimed, acknowledged := 0, 0
@@ -411,6 +468,8 @@ func (r ReadingList) Summary() Summary {
 		UnclaimedLines:       unclaimed,
 		AcknowledgedLines:    acknowledged,
 		AcknowledgementRatio: ackRatio,
+		ClaimTextBytes:       textBytes,
+		RuleProducedRecords:  byRule,
 	}
 }
 

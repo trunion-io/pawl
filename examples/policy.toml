@@ -34,3 +34,23 @@ sensitive_paths = [
     "src/billing/",
     "migrations/",
 ]
+
+# Deterministic acknowledgement rules (PAWL-017). These decide what an agent is
+# never asked to account for, so like the thresholds above they are yours and a
+# change to them belongs in a reviewed diff.
+#
+# A rule may only ever say "there was nothing to assume here". It can never
+# assert what was assumed — that needs a claimant.
+[accounting]
+
+# Paths whose changes carry nothing to assume. Trailing slash matches a prefix;
+# anything else is matched as a glob.
+auto_acknowledge_paths = [
+    "vendor/",
+    "*.pb.go",
+    "go.sum",
+]
+
+# Acknowledge spans whose whitespace-normalised content is unchanged. Provable
+# rather than heuristic: it reuses the same normalisation as claim fingerprints.
+auto_acknowledge_formatting_only = true

@@ -51,9 +51,9 @@ expiry check"*. The diff already shows what you did.
 | `--ticket` | none | e.g. `PROJ-1234` |
 | `--repo` | `.` | Repository root |
 
-Claims are appended to `.pawl/claims.jsonl` as one JSON object per line. The log
-is append-only by design: a claim written and then quietly edited to match the
-final code is not evidence of anything.
+Each claim is written to its own file under `.pawl/claims/`. Records are written
+once and never modified: a claim edited afterwards to match the final code is not
+evidence of anything.
 
 The span is read from the **working tree**, not from git, because at the moment
 of the edit the change has not been committed. That is the point.
@@ -78,15 +78,16 @@ elsewhere.
 | `--identity` | none | Human identity, for `expert`/`client` roles |
 | `--session` | none | Groups records from one working session |
 | `--repo` | `.` | Repository root |
+| `--auto` | off | Apply the rules in `.pawl/policy.toml` instead of a single span |
+| `--dry-run` | off | With `--auto`: report what the rules match, record nothing |
 
 **There is no text argument, deliberately.** Accounting for a trivial span must
 cost you nothing to write, or it will not happen. If you find yourself wanting to
 explain an acknowledgement, that is the signal it should have been a claim.
 
-Acknowledgements are appended to `.pawl/acknowledgements.jsonl` — a **separate
-file** from the claim log, so that nothing can count one as a claim. They never
-appear in the claim count shown to a client, and never in the attestation as
-claims.
+Acknowledgements are written to `.pawl/acks/` — a **separate directory** from
+claims, so that nothing reading claims can encounter one. They never appear in
+the claim count shown to a client, and never in the attestation as claims.
 
 ### What an acknowledgement does and does not do
 
@@ -119,6 +120,7 @@ accounted for?"* — as opposed to `verify`'s PR-time question.
 | `--repo` | `.` | Repository root |
 | `--json` | off | Machine-readable, for a harness hook |
 | `--quiet` | off | Print nothing, exit 0 |
+| `--once` | off | Stay silent if this exact pending set was already surfaced |
 
 Positional arguments restrict the report to those files.
 
@@ -198,6 +200,38 @@ shared append-only file.
 
 Running it at all is your choice; some teams will want the working records kept
 in the tree.
+
+## Automatic acknowledgement
+
+`pawl ack --auto` applies deterministic rules from `.pawl/policy.toml` and
+records an acknowledgement for every pending span they match.
+
+```toml
+[accounting]
+auto_acknowledge_paths = ["vendor/", "*.pb.go", "go.sum"]
+auto_acknowledge_formatting_only = true
+```
+
+Trailing slash matches a path prefix; anything else is matched as a glob.
+`auto_acknowledge_formatting_only` acknowledges a file whose
+whitespace-normalised content is unchanged — provable rather than heuristic,
+because it reuses the same normalisation as claim fingerprints.
+
+Three things bound what this can do:
+
+- **A rule can only ever acknowledge.** It can say there was nothing to assume;
+  it can never say *what* was assumed, because it does not know. Attempting to
+  record a rule-produced claim is an error.
+- **Rule-produced records say so.** Each carries `origin: rule` and the name of
+  the rule, so a rule that turns out to be wrong is traceable to every record it
+  made.
+- **They are sampled like any other acknowledgement.** A bad rule surfaces as
+  false clears attributed to it by name. The automation is measured, not
+  trusted.
+
+Rules live in your policy file for the same reason the thresholds do: they
+decide what escapes human attention, so they are yours, and a change to them
+belongs in a reviewed diff. They cannot be set from the environment.
 
 ## Claim kinds
 

@@ -42,6 +42,10 @@ type Policy struct {
 	// SensitivePaths: paths where implicit coverage is not good enough and a
 	// claim must assert a named check.
 	SensitivePaths []string
+	// Accounting holds the deterministic acknowledgement rules (PAWL-017).
+	// Separate from the gate thresholds above: these decide what an agent is
+	// not asked about, not what may merge.
+	Accounting Accounting
 }
 
 func Defaults() Policy {
@@ -104,6 +108,7 @@ func Load(repo string) (Policy, error) {
 	if v, ok := values["sensitive_paths"].([]string); ok {
 		p.SensitivePaths = v
 	}
+	p.Accounting = loadAccounting(tables)
 	return p, nil
 }
 

@@ -49,6 +49,11 @@ type AckOptions struct {
 	EndLine   int
 	Author    *model.Author
 	Session   string
+	// Origin and Rule record what produced this (PAWL-017 AC6, AC7). A rule
+	// that turns out to be wrong must be traceable to the records it made.
+	Origin model.RecordOrigin
+	Rule   string
+	Cost   *model.Cost
 }
 
 // RecordAck reads the span from the working tree, not from git, for the same
@@ -81,6 +86,10 @@ func RecordAck(repo string, opts AckOptions) (model.Acknowledgement, error) {
 		author = *opts.Author
 	}
 
+	origin := opts.Origin
+	if origin == "" {
+		origin = model.OriginAgent
+	}
 	return AppendAck(repo, model.Acknowledgement{
 		SchemaVersion: model.ClaimSchemaVersion,
 		ID:            id,
@@ -91,5 +100,8 @@ func RecordAck(repo string, opts AckOptions) (model.Acknowledgement, error) {
 		Fingerprint:   model.FingerprintLines(lines[opts.StartLine-1 : end]),
 		Author:        author,
 		Session:       opts.Session,
+		Origin:        origin,
+		Rule:          opts.Rule,
+		Cost:          opts.Cost,
 	})
 }

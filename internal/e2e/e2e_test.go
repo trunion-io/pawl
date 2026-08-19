@@ -668,6 +668,153 @@ func TestAcknowledgementsAreStoredApartFromClaims(t *testing.T) {
 	}
 }
 
+// TestRuleAcknowledgesAMatchingPath covers PAWL-017 AC1 and AC6/AC7 — the
+// record must say a rule produced it, and which one.
+func TestRuleAcknowledgesAMatchingPath(t *testing.T) {
+	repo := newRepo(t)
+	mustMkdir(t, filepath.Join(repo, "vendor"))
+	mustWrite(t, filepath.Join(repo, "vendor", "dep.go"), "package dep\n\nfunc X() {}\n")
+	writeFeature(t, repo)
+
+	acc := policy.Accounting{AcknowledgePaths: []string{"vendor/"}}
+	matches := resolve.AutoAck(repo, pending(t, repo), acc)
+
+	if len(matches) == 0 {
+		t.Fatal("rule matched nothing")
+	}
+	for _, m := range matches {
+		if !strings.HasPrefix(m.Path, "vendor/") {
+			t.Errorf("rule matched outside its path: %s", m.Path)
+		}
+		if m.Rule != "path:vendor/" {
+			t.Errorf("rule not named on the match: %q", m.Rule)
+		}
+	}
+
+	// And the record it produces says so.
+	m := matches[0]
+	path, start, end, origin, rule := resolve.RuleAcknowledgement(m)
+	a := ack(t, repo, claimlog.AckOptions{
+		Path: path, StartLine: start, EndLine: end, Origin: origin, Rule: rule,
+	})
+	if a.Origin != model.OriginRule {
+		t.Errorf("origin = %q, want rule", a.Origin)
+	}
+	if a.Rule == "" {
+		t.Error("a rule-produced record must name the rule that produced it")
+	}
+}
+
+// TestARuleCannotProduceAClaim is PAWL-017 AC3, the boundary the spec turns on.
+// A rule may say there was nothing to assume; it can never say what was
+// assumed, because it does not know.
+func TestARuleCannotProduceAClaim(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+
+	_, err := claimlog.Record(repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "a rule should not be able to say this",
+		Path: "src/auth.py", StartLine: 4, EndLine: 6,
+		Origin: model.OriginRule,
+	})
+	if err == nil {
+		t.Fatal("a rule must not be able to produce a claim")
+	}
+}
+
+// TestFormattingOnlyRuleUsesTheFingerprintNormalisation covers AC2's claim that
+// the rule is provable rather than heuristic. It reuses the same normalisation
+// as claim fingerprints; if the two ever disagreed, a span could be
+// acknowledged as unchanged while its claim reported drift.
+func TestFormattingOnlyRuleUsesTheFingerprintNormalisation(t *testing.T) {
+	acc := policy.Accounting{AcknowledgeFormattingOnly: true}
+
+	before := []string{"func x() {", "    return 1", "}"}
+	reindented := []string{"func x() {", "\t\treturn 1", "}"}
+	renamed := []string{"func y() {", "    return 1", "}"}
+
+	if !acc.FormattingOnly(before, reindented) {
+		t.Error("a pure reindent must read as formatting-only")
+	}
+	if acc.FormattingOnly(before, renamed) {
+		t.Error("a rename is a real change and must not be acknowledged by rule")
+	}
+
+	off := policy.Accounting{AcknowledgeFormattingOnly: false}
+	if off.FormattingOnly(before, reindented) {
+		t.Error("the rule must do nothing when the client has not enabled it")
+	}
+}
+
+// TestGateIgnoresRecordedCost is PAWL-017 AC10, and load-bearing. If a verdict
+// ever depended on cost, an agent would be paid to claim less.
+func TestGateIgnoresRecordedCost(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "expensive claim",
+		Path: "src/auth.py", StartLine: 4, EndLine: 9,
+		Cost: &model.Cost{Tokens: 999999, Scope: "claim_text"},
+	})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	withCost := build(t, repo, "HEAD~1", loadClaims(t, repo), collect(t, evidence.Sources{}))
+
+	// The same reading list with cost stripped must decide identically.
+	stripped := withCost
+	stripped.Claims = append([]model.ResolvedClaim(nil), withCost.Claims...)
+	for i := range stripped.Claims {
+		stripped.Claims[i].Claim.Cost = nil
+	}
+
+	a := policy.Evaluate(withCost, policy.Defaults())
+	b := policy.Evaluate(stripped, policy.Defaults())
+	if a.Allowed != b.Allowed || len(a.Violations) != len(b.Violations) {
+		t.Errorf("cost changed the gate decision: %+v vs %+v", a, b)
+	}
+}
+
+// TestSurfacingCacheSuppressesAnUnchangedRepeat covers AC14, and AC17 — the
+// cache decides only whether to speak, never what pawl concludes.
+func TestSurfacingCacheSuppressesAnUnchangedRepeat(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	spans := pending(t, repo)
+	if len(spans) == 0 {
+		t.Fatal("nothing pending to surface")
+	}
+
+	if resolve.AlreadySurfaced(repo, "src/auth.py", spans) {
+		t.Error("nothing has been surfaced yet")
+	}
+	resolve.MarkSurfaced(repo, "src/auth.py", spans)
+	if !resolve.AlreadySurfaced(repo, "src/auth.py", spans) {
+		t.Error("an unchanged repeat must be suppressed")
+	}
+
+	// A changed set speaks again.
+	changed := append([]resolve.PendingSpan(nil), spans...)
+	changed = append(changed, resolve.PendingSpan{Path: "src/auth.py", StartLine: 99, EndLine: 99})
+	if resolve.AlreadySurfaced(repo, "src/auth.py", changed) {
+		t.Error("a changed pending set must surface")
+	}
+
+	// AC17: deleting the cache changes nothing pawl concludes.
+	before := build(t, repo, "HEAD", nil, collect(t, evidence.Sources{}))
+	if err := os.RemoveAll(filepath.Join(repo, ".pawl", ".cache")); err != nil {
+		t.Fatal(err)
+	}
+	after := build(t, repo, "HEAD", nil, collect(t, evidence.Sources{}))
+	if before.Summary() != after.Summary() {
+		t.Error("deleting the cache changed a reading list; it must never influence a verdict")
+	}
+	// AC18: and an absent cache reads as not-surfaced, so it speaks again.
+	if resolve.AlreadySurfaced(repo, "src/auth.py", spans) {
+		t.Error("an absent cache must fail toward speaking, not toward silence")
+	}
+}
+
 // TestRecordsOnTwoBranchesMergeWithoutConflict is PAWL-018 AC3, and the reason
 // the spec exists.
 //

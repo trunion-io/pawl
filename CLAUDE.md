@@ -30,15 +30,15 @@ taxonomy that was blocking it is **settled** — two axes, binary verdict per sp
 plus a cause per (span, claim) pair — so it is ready to build. It is the largest
 item on this list and the only one on the critical path to the demo.
 
-PAWL-016 is built: `pawl pending` and the Claude Code hook. The next thing to
-build is [`PAWL-017`](./_spec/PAWL-017-deterministic-accounting.md), and it
-should land **before the hook is switched on for real work**. As built, the hook
-costs ~159 tokens per edit with 127 of that repeated boilerplate, and most
-acknowledgements are mechanically determinable — paying the unoptimised cost
-forty times a session to learn something we can predict is the wrong trade.
+PAWL-016, PAWL-017 and PAWL-018 are built. The hook now costs ~73 tokens per
+edit rather than 159, and stays silent on an unchanged repeat.
 
-After that, PAWL-007. It has almost nothing to sample until a corpus exists:
-this repo clears 6.9% of its own changed lines and 79% carry no record at all.
+**PAWL-017 AC13 is the one piece outstanding** — deferring surfacing to the end
+of a turn, which needs a Stop hook. Until then the hook still speaks per edit,
+just far more cheaply.
+
+Then PAWL-007. It has almost nothing to sample until a corpus exists: this repo
+clears 6.9% of its own changed lines and most carry no record at all.
 
 Other unblocked work, in rough order of value:
 
@@ -56,6 +56,31 @@ Other unblocked work, in rough order of value:
    implemented but untested.
 4. [`./_spec/PAWL-003-coverage-resolution.md`](./_spec/PAWL-003-coverage-resolution.md)
    AC3 — skipped-test handling has no dedicated test.
+
+## Accounting for what you change
+
+Every changed span must carry a **claim** or an **acknowledgement**. The hook
+tells you which spans are outstanding; it deliberately does not repeat these
+instructions each time, because that cost 127 of 159 tokens per edit.
+
+```bash
+pawl claim "<what you assumed>" --path <file> --lines <a-b> [--verified-by test:<TestName>]
+pawl ack --path <file> --lines <a-b>     # nothing to assume here
+pawl ack --auto                          # apply the rules in .pawl/policy.toml
+pawl pending                             # what is still outstanding
+```
+
+- **Use `ack` freely** for mechanical edits. It costs no prose by design, and it
+  is measured — over-acknowledging shows up as a rising ratio and as false
+  clears in the sampler. It is not a way of hiding.
+- **Use `claim`** when you assumed something, rejected an alternative, or could
+  not establish something and proceeded anyway. `undetermined` is a correct
+  answer, not a failure.
+- **Do not cite `spec:` evidence.** It cannot resolve until PAWL-009 exists, so
+  a claim citing it is permanently unverified.
+- **Account while the reasoning is still in context.** Recording later against a
+  finished diff is reconstruction, which C-2 forbids — and a claim recorded
+  before its span stops moving will drift and end up needing a human anyway.
 
 ## Working style in this product
 
