@@ -187,6 +187,12 @@ to pawl:
   span. Until it does, the ~85% unclaimed rate measured on this repo stands, and
   `max_unclaimed_lines = 0` keeps pressuring agents to backfill against a
   finished diff, which is the failure C-2 forbids.
+- **The record logs conflict on every second merge.** `.pawl/claims.jsonl` is
+  one shared append-only file, so two branches that each record a claim collide
+  — demonstrated against real git, and a merge queue amplifies it to every PR
+  against every other. PAWL-018 specs one file per record; until it is built,
+  expect to hand-resolve a conflicted evidence log, which is the worst possible
+  moment for a human to be picking sides.
 - **The `spec:` evidence type cannot resolve, and citing it makes a claim
   permanently unverified.** It requires a signed spec attestation, which
   requires the spec tool — PAWL-009, drafted and not built. Found by dogfooding
