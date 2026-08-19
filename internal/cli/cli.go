@@ -56,13 +56,16 @@ Commands:
   review   Review a sampled changeset. Two phases: verdict, then cause.
   calibrate  Report the false-clear rate over reviewed samples.
   setup    Install pawl's hook into your harness settings.
-  hook     Harness hook entry point. Not for interactive use.
   verify   Resolve claims against evidence and print the reading list.
   attest   Emit the in-toto Statement. Sign it with ` + "`cosign attest-blob`" + `.
   gate     Evaluate the policy pack. Exit 1 on violation.
   version  Print the version of this binary.
 
 Run "pawl <command> -h" for the options of a command.
+
+pawl hook <harness> exists for the harness to call and for diagnosing an
+installation. Its input and output follow the harness's protocol, not pawl's,
+so do not script against it — use pawl pending, whose output is ours.
 `
 
 // stringSlice makes a flag repeatable, which typer.Option gave the Python
@@ -829,9 +832,10 @@ func cmdHook(args []string) int {
 	repo := fs.String("repo", ".", "Repository root, when falling back to the working tree.")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "usage: pawl hook claude-code [<file>]")
-		fmt.Fprintln(fs.Output(), "\nReports unaccounted spans. Reads a harness payload on stdin when")
-		fmt.Fprintln(fs.Output(), "there is one; otherwise takes a file argument, otherwise the whole")
-		fmt.Fprintln(fs.Output(), "working tree. Install it with: pawl setup claude")
+		fmt.Fprintln(fs.Output(), "\nHarness integration point. Install it with: pawl setup claude")
+		fmt.Fprintln(fs.Output(), "\nIts input and output follow the harness's protocol and will change")
+		fmt.Fprintln(fs.Output(), "when that does. For a stable answer to what is unaccounted, and for")
+		fmt.Fprintln(fs.Output(), "anything you intend to script, use: pawl pending")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

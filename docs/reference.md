@@ -15,7 +15,6 @@
 | `pawl review` | Reviewer, by hand | Two-phase review of a sampled changeset |
 | `pawl calibrate` | Anywhere | Reports the false-clear rate |
 | `pawl setup` | Once, per machine | Installs pawl's hook into your harness settings |
-| `pawl hook` | Called by the harness | Hook entry point; not for interactive use |
 | `pawl version` | Anywhere | Prints version and platform |
 
 `pawl <command> -h` lists the flags for any command.
@@ -177,10 +176,18 @@ key order is not. Check the backup if you want the original layout.
 
 Open `/hooks` once, or restart, for the harness to pick it up.
 
-### `pawl hook claude-code`
+### Checking the hook works
 
-The entry point the settings file points at, and a normal command you can run
-yourself. It reports unaccounted spans, resolving what to look at in this order:
+`pawl hook claude-code` is what the settings file points at. It is **not a
+general command** and is deliberately absent from the command list above.
+
+Its input and output are shaped by the harness's protocol, not by pawl. When
+that protocol changes, this changes with it — so **do not script against it**.
+For a stable answer to "what is unaccounted?", use [`pawl pending`](#pawl-pending),
+whose output is ours to keep stable.
+
+What it is good for is confirming an installation actually works. It resolves
+what to look at in this order:
 
 ```bash
 pawl hook claude-code src/auth.go     # 1. an explicit path wins
@@ -196,6 +203,11 @@ Running it bare at a prompt gives you the working tree — it does not wait for
 input. A **pipe** carrying nothing usable is treated differently: that is a
 harness call that went wrong, and it stays silent rather than scanning the tree
 on every edit.
+
+It is read-only apart from one thing: it records what it surfaced, under
+`.pawl/.cache/`, so it does not repeat itself. That cache never influences a
+verdict and is safe to delete. It writes no records, touches no code, and
+changes no settings.
 
 It also stays quiet when the same set of spans was already surfaced, so editing
 one file repeatedly does not repeat the same message.

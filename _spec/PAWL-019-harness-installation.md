@@ -122,6 +122,15 @@ not have to hand-edit JSON to get it. This is also what makes the install
 testable against a temporary directory rather than against whoever is running
 the suite.
 
+**AC17** — The system shall not present the harness entry point among its
+general commands, and shall state that its output follows the harness rather
+than being a pawl interface.
+`checkable: yes` (once built) — the shape of what it reads and writes is decided
+by a harness, not by pawl. Listing it beside `claim` and `gate` invites someone
+to script against it, and the next change to a harness protocol then breaks
+them. It is a diagnostic and an integration point, and the stable answer to
+"what is unaccounted?" is `pawl pending`.
+
 ### The configuration ships in the binary
 
 **AC14** — The system shall hold the harness configuration it installs as a
