@@ -39,9 +39,11 @@ vet:
 	go vet ./...
 
 .PHONY: check
-check: fmt vet test ## What CI runs
+check: fmt vet test check-pins ## What CI runs
 
 .PHONY: dist
+FUZZTIME ?= 30s
+
 dist: ## Cross-compile every supported platform + checksums
 	@rm -rf dist && mkdir -p dist
 	@for p in $(PLATFORMS); do \
@@ -51,6 +53,7 @@ dist: ## Cross-compile every supported platform + checksums
 		echo "  $$out"; \
 		GOOS=$$os GOARCH=$$arch go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o "$$out" ./cmd/pawl || exit 1; \
 	done
+	@cp LICENSE.txt THIRD-PARTY-NOTICES.txt dist/
 	@cd dist && sha256sum * > SHA256SUMS
 	@echo "checksums:" && cat dist/SHA256SUMS
 	@$(MAKE) --no-print-directory verify-dist
@@ -78,3 +81,21 @@ clean:
 .PHONY: help
 help: ## List targets
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-10s %s\n", $$1, $$2}'
+
+check-pins: ## PAWL-025 AC1 — every GitHub Action pinned to an immutable commit
+	@refs=$$(grep -h 'uses:' .github/workflows/*.yml \
+		| sed 's/.*uses:[[:space:]]*//; s/[[:space:]]*#.*//; s/[[:space:]]*$$//'); \
+	bad=$$(printf '%s\n' "$$refs" | grep -vE '@[0-9a-f]{40}$$' || true); \
+	if [ -n "$$bad" ]; then \
+		printf '%s\n' "$$bad" | sed 's/^/  UNPINNED  /'; \
+		echo "check-pins: FAIL — a tag is a pointer its owner can move, and the"; \
+		echo "            release job holds id-token: write."; \
+		exit 1; \
+	fi; \
+	echo "check-pins: ok — $$(printf '%s\n' "$$refs" | grep -c . ) actions pinned to commits"
+
+fuzz: ## PAWL-025 AC8 — exercise the parsers that read input we did not produce
+	go test -run=XXX -fuzz=FuzzJUnit      -fuzztime=$(FUZZTIME) ./internal/evidence
+	go test -run=XXX -fuzz=FuzzCoverage   -fuzztime=$(FUZZTIME) ./internal/evidence
+	go test -run=XXX -fuzz=FuzzTypecheck  -fuzztime=$(FUZZTIME) ./internal/evidence
+	go test -run=XXX -fuzz=FuzzRecord     -fuzztime=$(FUZZTIME) ./internal/claimlog

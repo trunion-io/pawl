@@ -106,6 +106,8 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-023-self-management.md` | **built** · `pawl install verify` / `upgrade` |
 | `PAWL-021-cli-coverage.md` | **built** · subprocess tests for the CLI seam |
 | `PAWL-022-closing-partial-criteria.md` | **built** · extends PAWL-003, PAWL-004, PAWL-006 |
+| `PAWL-024-licensing-and-source-availability.md` | **built** · public source, proprietary licence · extends PAWL-013 |
+| `PAWL-025-security-posture.md` | **built** · pinning, scanning, fuzzing · extends PAWL-024 |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.

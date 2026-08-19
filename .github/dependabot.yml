@@ -1,0 +1,25 @@
+# PAWL-025 AC1 pins every action to a commit. Pinning without a way to move the
+# pin is abandoned pinning: the SHA stops tracking security fixes and nobody
+# notices, which trades a live risk for a slow one.
+#
+# Dependabot reads the `# vX.Y.Z` comment beside each SHA and rewrites both, so
+# the pins stay current and each bump arrives as a reviewable diff rather than
+# silently, which is the whole point of not using tags.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # No require block today, and there should not be one — but if a dependency is
+  # ever added, this is what makes it visible rather than forgotten.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,0 +1,60 @@
+pawl — Provenance of Agent-Written Lines
+Copyright (c) 2026 Trunion Ltd. All rights reserved.
+
+SOURCE-AVAILABLE, PROPRIETARY LICENCE
+
+The source code of this software is published so that it can be read, audited
+and independently rebuilt. Publication does not make it open source and grants
+no licence to use it.
+
+1. NO GRANT OF USE
+   No right to use, execute, copy, modify, merge, publish, distribute,
+   sublicense or sell this software, or works derived from it, is granted by
+   this file or by the availability of its source. Such rights are granted only
+   by a written commercial agreement with Trunion Ltd.
+
+2. PERMITTED WITHOUT AGREEMENT — VERIFICATION
+   Notwithstanding clause 1, any person may, without charge and without prior
+   permission:
+
+   (a) read, study and analyse the source code;
+   (b) build the source code for the sole purpose of verifying that a published
+       binary corresponds to it, including reproducing a tagged build and
+       comparing checksums;
+   (c) inspect, verify and validate any published binary, checksum, signature or
+       attestation; and
+   (d) publish the results of anything in (a) to (c), including any discrepancy,
+       defect or vulnerability found.
+
+   This clause exists deliberately. This software asks its users to verify
+   claims rather than trust them, and terms that made verifying this software
+   itself impossible, or that penalised reporting what verification found, would
+   contradict the purpose of the software. Nothing in this licence shall be read
+   as restricting good-faith security research or its publication.
+
+   Clause 2 permits building for verification. It does not permit running the
+   resulting binary for any other purpose.
+
+3. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+4. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+   Where a written commercial agreement with Trunion Ltd. covers the same
+   subject matter, that agreement prevails over clauses 3 and 4.
+
+5. THIRD-PARTY COMPONENTS
+   This software is distributed as a statically linked binary that incorporates
+   third-party code under its own terms. See THIRD-PARTY-NOTICES.txt. Nothing in
+   this licence limits any right granted to you by those terms.
+
+6. TRADEMARKS
+   No right to use the name "pawl" or "Trunion", or any associated mark, is
+   granted by this licence.
+
+Enquiries: legal@trunion.io

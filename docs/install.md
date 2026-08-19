@@ -101,6 +101,25 @@ ENTRYPOINT ["/pawl"]
 You need `ca-certificates` in the image only if you add features that make
 outbound network calls. pawl currently makes none.
 
+## Licence
+
+pawl is **source-available, not open source**. The source is public so you can
+read it and rebuild it; running it is granted by a commercial agreement, not by
+downloading it. `LICENSE.txt` ships with every release and states the terms.
+
+Verification is carved out explicitly and needs no agreement: build the source to
+check a published binary against it, verify signatures and checksums, and publish
+anything you find. See [../SECURITY.md](../SECURITY.md).
+
+`THIRD-PARTY-NOTICES.txt` ships alongside it. pawl declares no module
+dependencies, but the binary statically links the Go runtime and standard
+library, which is BSD-3-Clause and requires its notice be reproduced in binary
+distributions. Zero dependencies is not zero attribution — it is why that file is
+one entry long rather than hundreds.
+
+Both files are listed in `SHA256SUMS` and signed, so the terms you received are
+as tamper-evident as the binary you received.
+
 ## Uninstalling
 
 Delete the binary. pawl writes only to `.pawl/` inside your repo and starts no

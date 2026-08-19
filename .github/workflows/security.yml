@@ -1,0 +1,95 @@
+# PAWL-025 — security checks for a public repository.
+#
+# Every job here can fail the build. A security workflow that only annotates is
+# the failure mode pawl exists to name: a check that is asserted, runs, and
+# changes nothing.
+#
+# The schedule is not decoration. pawl declares no module dependencies, so every
+# vulnerability it can have is a Go standard library or toolchain vulnerability —
+# disclosed on someone else's timetable, long after the pull request that shipped
+# the code. A pull-request-only trigger would never see one.
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'   # Monday, off the hour to avoid the scheduling spike
+  workflow_dispatch:
+
+# AC3: least privilege by default. Jobs that need more say so themselves.
+permissions:
+  contents: read
+
+jobs:
+  # AC5 — known vulnerabilities in the code and the toolchain it pins.
+  vulnerabilities:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Pinned, because AC1 applies to scanners too: they are dependencies of the
+      # pipeline even though they are not dependencies of the binary, and the
+      # argument for an empty require block does not extend to CI.
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+
+      # govulncheck reports only vulnerabilities on a reachable call path, which
+      # is what keeps this from becoming the noise the spec warns about.
+      - run: govulncheck ./...
+
+  # AC6 — static security analysis.
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # upload findings
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          languages: go
+          queries: security-extended
+
+      - uses: github/codeql-action/autobuild@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+
+  # AC8/AC9 — the parsers that read bytes pawl did not write.
+  #
+  # Short on a pull request: this is a regression check that the seed corpus and
+  # a brief search stay panic-free, not a search for new findings. The scheduled
+  # run is where the longer budget goes.
+  fuzz:
+    name: fuzz parsers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Fuzz
+        run: make fuzz FUZZTIME=${{ github.event_name == 'schedule' && '300s' || '30s' }}
+
+      # A crasher is written to testdata/, and that is the artifact worth keeping:
+      # it is a reproducer, and it is what turns a red build into a fixable bug.
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-crashers
+          path: internal/**/testdata/fuzz/**
+          if-no-files-found: ignore

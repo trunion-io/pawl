@@ -158,10 +158,33 @@ position, and [`./_spec/constitution.md`](./_spec/constitution.md), which is
 binding.
 
 ```bash
-make help      # list targets
-make check     # fmt + vet + 72 e2e tests against real git repositories
+make help        # list targets
+make check       # fmt + vet + the e2e suite + action pinning
+make fuzz        # the parsers that read input pawl did not write
+make dist        # cross-compile, checksum, verify each artifact's version
 ```
 
 [`.envrc`](./.envrc) (direnv) puts `./bin` on `PATH` and pins `CGO_ENABLED=0`, so
 `pawl` means your local build while you are in this directory and nothing once
 you leave.
+
+## Security
+
+Vulnerabilities go to [SECURITY.md](./SECURITY.md), privately — not a public
+issue. Reading the source, rebuilding a tag to check it against a published
+binary, and publishing what you find are all explicitly permitted, including
+under the proprietary licence.
+
+## Licence
+
+**Source-available, not open source.** The source is published so it can be read,
+audited and independently rebuilt; that publication grants no right to use it.
+Rights to run pawl come from a commercial agreement with Trunion Ltd.
+
+The exception is verification: anyone may build this source to check that a
+published binary corresponds to it, and may publish any discrepancy found. That
+carve-out is deliberate — pawl asks its users to verify rather than trust, and a
+licence that made verifying pawl itself impossible would contradict the product.
+
+See [LICENSE.txt](./LICENSE.txt), and [THIRD-PARTY-NOTICES.txt](./THIRD-PARTY-NOTICES.txt)
+for the Go standard library notice that every static binary carries.
