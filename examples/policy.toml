@@ -1,0 +1,36 @@
+# .pawl/policy.toml
+#
+# The thresholds are the client's, not the supplier's. The factory brings the
+# mechanism and a defensible default; the bar it has to clear is set by the team
+# that owns the service. A supplier that writes both the gate and the number it
+# clears has built theatre.
+#
+# Commit this file to the client repo. Changes to it should be reviewed like any
+# other change, because they are.
+
+[gate]
+
+# Comprehension has a hard ceiling regardless of trail quality. Start generous
+# and ratchet down once the pod is decomposing work habitually.
+max_changed_lines = 400
+
+# Fraction of changed lines that may reach a human before the changeset is
+# judged not worth reviewing incrementally. Above this, decompose or improve
+# the trail — either is better than a reviewer skimming.
+max_must_read_ratio = 0.35
+
+# Changed code with no claim over it at all. Zero is the right default: silence
+# from the agent is not coverage.
+max_unclaimed_lines = 0
+
+# An agent that could not establish something and proceeded anyway always
+# escalates, whatever the tests say.
+block_on_undetermined = true
+
+# Paths where implicit coverage is not sufficient and a claim must cite a named
+# check. Auth, billing, migrations, anything with a blast radius.
+sensitive_paths = [
+    "src/auth/",
+    "src/billing/",
+    "migrations/",
+]

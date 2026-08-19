@@ -1,0 +1,11 @@
+# Build output. GOBIN points at ./bin via .envrc; `make dist` writes ./dist.
+bin/
+dist/
+
+# direnv's per-directory cache. .envrc itself IS committed.
+.direnv/
+
+# pawl's own claim log. Excluded from the diff by gitutil.DefaultExcludes too —
+# counting it would inflate the denominator and put the trail on its own
+# reading list.
+.pawl/

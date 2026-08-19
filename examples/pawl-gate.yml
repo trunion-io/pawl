@@ -1,0 +1,109 @@
+# .github/workflows/pawl-gate.yml
+#
+# The whole CI surface of the kit. One job, no infrastructure, no hosted
+# service. Signing is cosign keyless off the Actions OIDC token, so there is no
+# key custody to negotiate with the client's security team.
+#
+# pawl installs as a single static binary. No runtime, no interpreter, no
+# package manager — which is the point: a supply-chain assurance tool should not
+# arrive with a supply chain of its own.
+
+name: pawl gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write      # cosign keyless
+  checks: write        # reading-list annotations
+  attestations: write
+
+env:
+  # Pin exactly. pawl decides whether this PR can merge, so treat it like an
+  # unpinned linter that can block a release: a floating version is a gate whose
+  # behaviour can change without a review.
+  PAWL_VERSION: "0.1.0"
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the gate diffs against the base ref
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Install pawl
+        run: |
+          base="https://github.com/trunion/pawl/releases/download/v${PAWL_VERSION}"
+          curl -sSfLO "${base}/pawl-${PAWL_VERSION}-linux-amd64"
+          curl -sSfLO "${base}/pawl-${PAWL_VERSION}-linux-amd64.sigstore.json"
+
+          # Verify before trusting it. The identity is the release workflow, not
+          # a person, and there is no key to have leaked.
+          cosign verify-blob \
+            --certificate-identity-regexp 'https://github.com/trunion/pawl/.*' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --bundle "pawl-${PAWL_VERSION}-linux-amd64.sigstore.json" \
+            "pawl-${PAWL_VERSION}-linux-amd64"
+
+          install -m 0755 "pawl-${PAWL_VERSION}-linux-amd64" /usr/local/bin/pawl
+          pawl version
+
+      # Whatever the repo already runs. pawl consumes the reports; it does not
+      # replace the pipeline, and it does not care what language produced them —
+      # it reads junit XML and Cobertura, which every ecosystem emits. Swap
+      # these two steps for your own.
+      - name: Tests
+        run: make test JUNIT=junit.xml COVERAGE=coverage.xml
+        continue-on-error: true   # a failing test is evidence, not an abort
+
+      - name: Typecheck
+        run: make typecheck > typecheck.json || true
+
+      - name: Reading list
+        run: |
+          pawl verify \
+            --base origin/${{ github.base_ref }} \
+            --junit junit.xml \
+            --coverage coverage.xml \
+            --typecheck typecheck.json \
+            --annotations annotations.json
+
+      - name: Attest
+        run: |
+          pawl attest \
+            --base origin/${{ github.base_ref }} \
+            --junit junit.xml \
+            --coverage coverage.xml \
+            --typecheck typecheck.json \
+            --ticket "${{ github.event.pull_request.title }}" \
+            --policy-pack "pawl@${PAWL_VERSION}" \
+            --out assumption-trail.intoto.json
+
+      - name: Sign the trail
+        run: |
+          cosign attest-blob \
+            --predicate assumption-trail.intoto.json \
+            --type https://trunion.io/attestations/assumption-trail/v0.1 \
+            --yes --bundle assumption-trail.sigstore.json \
+            assumption-trail.intoto.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assumption-trail
+          path: |
+            assumption-trail.intoto.json
+            assumption-trail.sigstore.json
+
+      # Last, so the trail is published even on a block. A failed gate still
+      # produces evidence — that is the point of it.
+      - name: Gate
+        run: |
+          pawl gate \
+            --base origin/${{ github.base_ref }} \
+            --junit junit.xml \
+            --coverage coverage.xml \
+            --typecheck typecheck.json
