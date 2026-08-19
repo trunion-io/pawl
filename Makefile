@@ -12,7 +12,15 @@ export CGO_ENABLED := 0
 # -trimpath strips local filesystem paths, which is what makes rebuilds
 # byte-identical. For a tool whose product is provenance, a client being able to
 # rebuild from source and match our checksum is worth more than it costs.
-GOFLAGS := -trimpath
+# -buildvcs=false because Go otherwise stamps vcs.revision, vcs.time and
+# vcs.modified into every binary, which makes the output depend on the state of
+# the working tree rather than on the source. PAWL-013 AC11 promises a third
+# party can rebuild a tag byte-for-byte; under VCS stamping that holds only if
+# their clone is pristine and fails outright for anyone building from a source
+# tarball, which has no .git at all. Provenance belongs in the signature and the
+# attestation, not smuggled into the artifact in a way that breaks the property
+# the attestation is asserting.
+GOFLAGS := -trimpath -buildvcs=false
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
 .DEFAULT_GOAL := build

@@ -31,10 +31,31 @@ jobs:
       - name: Reproducible build
         shell: bash
         run: |
+          # Scratch goes outside the tree. Writing first.txt into the repo
+          # root made the working tree dirty for the second build, and Go
+          # stamped that difference into the binary — the check failed on its
+          # own side effect.
+          tmp="$(mktemp -d)"
+
           make dist VERSION=ci-check
-          sha256sum dist/pawl-ci-check-linux-amd64 > first.txt
+          sha256sum dist/pawl-ci-check-linux-amd64 | awk '{print $1}' > "$tmp/first"
           rm -rf dist
+
+          # Deliberately dirty the tree before the second build. Reproducibility
+          # must be a property of the source, not of whether anything happens to
+          # be uncommitted — a third party rebuilding a tag has no way to
+          # guarantee the second condition, and one building from a tarball has
+          # no VCS state at all.
+          echo "scratch" > untracked-on-purpose.txt
+
           make dist VERSION=ci-check
-          sha256sum dist/pawl-ci-check-linux-amd64 > second.txt
-          diff <(awk '{print $1}' first.txt) <(awk '{print $1}' second.txt) \
-            || { echo "builds are not reproducible"; exit 1; }
+          sha256sum dist/pawl-ci-check-linux-amd64 | awk '{print $1}' > "$tmp/second"
+          rm -f untracked-on-purpose.txt
+
+          if ! diff "$tmp/first" "$tmp/second"; then
+            echo "builds are not reproducible"
+            echo "embedded build settings:"
+            go version -m dist/pawl-ci-check-linux-amd64 | grep -E 'build\s' || true
+            exit 1
+          fi
+          echo "reproducible: $(cat "$tmp/first")"

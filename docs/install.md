@@ -71,7 +71,11 @@ make dist VERSION=0.1.0
 sha256sum -c SHA256SUMS
 ```
 
-`-trimpath` and `CGO_ENABLED=0` are what make this deterministic. If your
+`-trimpath`, `CGO_ENABLED=0` and `-buildvcs=false` are what make this
+deterministic. The last of those matters more than it looks: without it Go
+stamps the commit, the build time and whether the tree was dirty into the
+binary, so the checksum would depend on the state of your clone and would
+never match at all if you built from a source tarball. If your
 checksum does not match a published one, that is a finding — report it.
 
 ## Pinning in CI
