@@ -88,7 +88,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-004-reading-list.md` | delivered |
 | `PAWL-005-attestation.md` | delivered |
 | `PAWL-006-policy-gate.md` | delivered |
-| `PAWL-007-calibration-sampler.md` | **drafted, not built — next.** Taxonomy settled |
+| `PAWL-007-calibration-sampler.md` | **built** — sampler, two-phase review, report |
 | `PAWL-008-harness-hooks.md` | **AC2–AC6 built** (CLI half); AC1, AC7, AC8 await the hook · extends PAWL-001, PAWL-006 |
 | `PAWL-009-spec-tool.md` | drafted, not built |
 | `PAWL-010-documentation.md` | drafted · **written after the docs it specifies** |

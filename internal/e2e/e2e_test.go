@@ -8,14 +8,17 @@ package e2e
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"trunion.io/pawl/internal/attest"
+	"trunion.io/pawl/internal/calibrate"
 	"trunion.io/pawl/internal/claimlog"
 	"trunion.io/pawl/internal/evidence"
 	"trunion.io/pawl/internal/model"
@@ -665,6 +668,187 @@ func TestAcknowledgementsAreStoredApartFromClaims(t *testing.T) {
 	}
 	if len(acks) != 1 {
 		t.Errorf("acknowledgement not stored: got %d", len(acks))
+	}
+}
+
+// sampleFrom builds a reviewable sample from a changeset with a cleared span.
+func sampleFrom(t *testing.T, repo string) calibrate.Sample {
+	t.Helper()
+	writeFeature(t, repo)
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "exp is unix seconds",
+		Path: "src/auth.py", StartLine: 4, EndLine: 6,
+		VerifiedBy: testRef("tests.test_auth.test_expiry"),
+	})
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 8, EndLine: 9})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := collect(t, evidence.Sources{JUnit: []string{writeJUnit(t, repo)}})
+	rl := buildWithAcks(t, repo, "HEAD~1", loadClaims(t, repo), acks, ev)
+
+	s := calibrate.FromReadingList(rl, "0.1.0", policy.Defaults(), "sample01", time.Now())
+	if len(s.Spans) == 0 {
+		t.Fatal("no cleared spans to sample")
+	}
+	return s
+}
+
+// TestSamplingIsDeterministicPerChangeset covers PAWL-007 AC1.
+//
+// Deriving the decision from the tree rather than fresh randomness is what
+// stops a changeset being opted out of review by re-running until it says no.
+func TestSamplingIsDeterministicPerChangeset(t *testing.T) {
+	tree := "e0845caa150e2a091739fb08d98cf146d8cb75c0"
+	first := calibrate.Selected(tree, 0.5)
+	for range 20 {
+		if calibrate.Selected(tree, 0.5) != first {
+			t.Fatal("the same changeset must always get the same decision; " +
+				"otherwise re-running is another attempt at not being sampled")
+		}
+	}
+	if !calibrate.Selected(tree, 1.0) {
+		t.Error("rate 1.0 must always sample")
+	}
+	if calibrate.Selected(tree, 0) {
+		t.Error("rate 0 must never sample")
+	}
+}
+
+// TestClaimsStayHiddenUntilEverySpanIsJudged is PAWL-007 AC7, and the criterion
+// that turns blinding from an aspiration into a mechanical check.
+func TestClaimsStayHiddenUntilEverySpanIsJudged(t *testing.T) {
+	repo := newRepo(t)
+	s := sampleFrom(t, repo)
+
+	if s.MayRevealClaims() {
+		t.Fatal("claims must not be revealed before any span is judged")
+	}
+
+	// Attributing a cause early must be refused, not merely discouraged.
+	sp := s.Spans[0]
+	err := s.RecordCause(sp.Path, sp.StartLine, sp.EndLine, "someclaim", calibrate.CauseClaimFalse)
+	if !errors.Is(err, calibrate.ErrPhase1Incomplete) {
+		t.Errorf("phase 2 must be refused before phase 1 completes, got %v", err)
+	}
+
+	// Judge every span; only then do claims become visible.
+	for _, sp := range s.Spans {
+		if err := s.RecordVerdict(sp.Path, sp.StartLine, sp.EndLine,
+			calibrate.VerdictCorrect, "rich", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !s.MayRevealClaims() {
+		t.Error("claims should be revealed once every span is judged")
+	}
+}
+
+// TestCauseOnlyAttachesToAFalseClear — a cause explains a false clear, and
+// attaching one elsewhere would put noise in the only corpus that matters.
+func TestCauseOnlyAttachesToAFalseClear(t *testing.T) {
+	repo := newRepo(t)
+	s := sampleFrom(t, repo)
+	for _, sp := range s.Spans {
+		if err := s.RecordVerdict(sp.Path, sp.StartLine, sp.EndLine,
+			calibrate.VerdictCorrect, "rich", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sp := s.Spans[0]
+	if err := s.RecordCause(sp.Path, sp.StartLine, sp.EndLine, "c1", calibrate.CauseAnchorWrong); err == nil {
+		t.Error("a cause must not attach to a span judged correct")
+	}
+}
+
+// TestFalseClearRateCountsOnlyReviewedSpans covers AC4.
+//
+// An unreviewed span is evidence that nobody looked, not that clearing was
+// right. Counting it as correct would let the number improve by sampling more
+// and reviewing less.
+func TestFalseClearRateCountsOnlyReviewedSpans(t *testing.T) {
+	repo := newRepo(t)
+	s := sampleFrom(t, repo)
+
+	// Judge exactly one span, leave the rest pending.
+	sp := s.Spans[0]
+	if err := s.RecordVerdict(sp.Path, sp.StartLine, sp.EndLine,
+		calibrate.VerdictFalseClear, "rich", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	rep := calibrate.Summarise([]calibrate.Sample{s})
+	if rep.ReviewedSpans != 1 {
+		t.Errorf("reviewed spans = %d, want 1", rep.ReviewedSpans)
+	}
+	if rep.FalseClearRate != 1.0 {
+		t.Errorf("rate = %v, want 1.0 over the single reviewed span", rep.FalseClearRate)
+	}
+	if rep.PendingReview != 1 {
+		t.Errorf("pending review = %d, want the sample counted as incomplete", rep.PendingReview)
+	}
+}
+
+// TestReportBreaksDownByRoleAndCause covers AC5 and AC6 — "improve the agents"
+// and "fix the anchoring" are different projects and one rate cannot tell them
+// apart.
+func TestReportBreaksDownByRoleAndCause(t *testing.T) {
+	repo := newRepo(t)
+	s := sampleFrom(t, repo)
+	for _, sp := range s.Spans {
+		if err := s.RecordVerdict(sp.Path, sp.StartLine, sp.EndLine,
+			calibrate.VerdictFalseClear, "rich", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Attribute one to a pawl defect.
+	for _, sp := range s.Spans {
+		if len(sp.ClaimIDs) > 0 {
+			if err := s.RecordCause(sp.Path, sp.StartLine, sp.EndLine,
+				sp.ClaimIDs[0], calibrate.CauseAnchorWrong); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+
+	rep := calibrate.Summarise([]calibrate.Sample{s})
+	if rep.ByCause[string(calibrate.CauseAnchorWrong)] != 1 {
+		t.Errorf("cause breakdown = %v, want one anchor_wrong", rep.ByCause)
+	}
+	if len(rep.ByRole) == 0 {
+		t.Error("role breakdown is the handover curve; it must not be empty")
+	}
+	// An acknowledged span carries no claim, so waving code through must still
+	// be visible rather than vanishing from the breakdown.
+	if _, ok := rep.ByRole["acknowledged"]; !ok {
+		t.Errorf("acknowledged spans missing from the role breakdown: %v", rep.ByRole)
+	}
+}
+
+// TestSamplesRoundTripThroughDisk — the corpus has to survive the engagement.
+func TestSamplesRoundTripThroughDisk(t *testing.T) {
+	repo := newRepo(t)
+	s := sampleFrom(t, repo)
+	if err := calibrate.Save(repo, s); err != nil {
+		t.Fatal(err)
+	}
+	all, err := calibrate.LoadAll(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 || all[0].ID != s.ID {
+		t.Fatalf("expected the sample back, got %d", len(all))
+	}
+	if all[0].ToolVersion != "0.1.0" {
+		t.Errorf("tool version not persisted: %q — AC8 needs it to qualify the rate", all[0].ToolVersion)
+	}
+	if all[0].Policy.MaxMustReadRatio != policy.Defaults().MaxMustReadRatio {
+		t.Error("policy snapshot not persisted; a rate mixing thresholds is not a rate")
 	}
 }
 

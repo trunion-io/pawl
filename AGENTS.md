@@ -128,9 +128,9 @@ Phase 1 (build the kit) — **items 1–5 DONE**
 3. ✅ Assembler + verifier — `internal/anchor`, `internal/evidence`, `internal/resolve`
 4. ✅ Policy pack v0 — `internal/policy`, `examples/policy.toml`
 5. ✅ CI check + annotations — `examples/pawl-gate.yml`, `verify --annotations`
-6. ⬜ **Calibration sampler — NEXT, and now unblocked.** The verdict taxonomy is
-   settled: two axes, a binary `correct`/`false_clear` per span and a cause per
-   (span, claim) pair. See PAWL-007. Escalation precision split out to PAWL-014.
+6. ✅ Calibration sampler — `pawl sample`, `pawl review`, `pawl calibrate`.
+   Two axes: a binary `correct`/`false_clear` per span, a cause per (span,
+   claim) pair. Escalation precision is PAWL-014 and is not built.
 
 Phase 2 (prove it)
 
@@ -180,7 +180,13 @@ to pawl:
 
 ## Known gaps — do not present these as solved
 
-- No calibration sampler. Everything is unmeasured until item 6 exists.
+- **The sampler exists but the corpus does not.** A false-clear rate over a
+  handful of reviewed spans is not a number to quote at anyone. Everything stays
+  unmeasured until sustained real use produces samples — which is Phase 2 item 7,
+  not a build task.
+- **Escalation precision is not built** (PAWL-014). Reporting a false-clear rate
+  without it is reporting half a measurement: a tool that escalates everything
+  scores perfectly and is worthless.
 - **Claiming is still prompted at edit time.** PAWL-008's CLI half is built —
   `pawl ack`, the acknowledgement record, the gate distinction and the ratio —
   but AC1's hook is not, so nothing yet *requires* an agent to account for a

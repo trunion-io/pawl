@@ -26,8 +26,12 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
+
+	"trunion.io/pawl/internal/calibrate"
 
 	"trunion.io/pawl/internal/attest"
 	"trunion.io/pawl/internal/claimlog"
@@ -47,6 +51,9 @@ Commands:
   ack      Account for a changed span that carries nothing to assume.
   pending  List changed spans in the working tree that carry no record yet.
   prune    Remove record files for a changeset that has been attested.
+  sample   Select this changeset for calibration review, at the configured rate.
+  review   Review a sampled changeset. Two phases: verdict, then cause.
+  calibrate  Report the false-clear rate over reviewed samples.
   verify   Resolve claims against evidence and print the reading list.
   attest   Emit the in-toto Statement. Sign it with ` + "`cosign attest-blob`" + `.
   gate     Evaluate the policy pack. Exit 1 on violation.
@@ -105,6 +112,12 @@ func Run(args []string, version string) int {
 		return cmdPending(args[1:])
 	case "prune":
 		return cmdPrune(args[1:])
+	case "sample":
+		return cmdSample(args[1:], version)
+	case "review":
+		return cmdReview(args[1:])
+	case "calibrate":
+		return cmdCalibrate(args[1:])
 	case "verify":
 		return cmdVerify(args[1:])
 	case "attest":
@@ -121,6 +134,20 @@ func Run(args []string, version string) int {
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", args[0], usage)
 		return 2
 	}
+}
+
+// takeLeadingPositional pulls a leading non-flag argument off the front.
+//
+// The standard flag package stops parsing at the first non-flag argument, so
+// `pawl review <id> --span x` would silently parse zero flags. typer and click
+// intersperse positionals and options; flag does not. Every command here that
+// takes a leading positional needs this, and forgetting it has now produced the
+// same silent no-op twice — once in `claim`, once in `review`.
+func takeLeadingPositional(args []string) (string, []string) {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		return args[0], args[1:]
+	}
+	return "", args
 }
 
 func fail(err error) int {
@@ -176,10 +203,7 @@ func cmdClaim(args []string) int {
 	// and click intersperse positionals and options; flag does not. The claim
 	// text leads the command in every example we publish, so pull it off the
 	// front by hand rather than making users write the flags first.
-	var text string
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		text, args = args[0], args[1:]
-	}
+	text, args := takeLeadingPositional(args)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -529,6 +553,265 @@ func cmdAckAuto(repo string, dryRun bool, harness, modelName, session string) in
 	fmt.Println("These were recorded, not skipped — they are sampled like any other")
 	fmt.Println("acknowledgement, so a wrong rule surfaces as a false clear.")
 	return 0
+}
+
+// cmdSample selects a changeset for calibration review (PAWL-007 AC1).
+func cmdSample(args []string, version string) int {
+	fs := flag.NewFlagSet("sample", flag.ContinueOnError)
+	e := &evidenceFlags{}
+	e.register(fs)
+	rate := fs.Float64("rate", 0.05, "Fraction of cleared changesets to sample.")
+	force := fs.Bool("force", false, "Sample regardless of the rate.")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	rl, err := resolveReadingList(e)
+	if err != nil {
+		return fail(err)
+	}
+	if !*force && !calibrate.Selected(rl.Tree, *rate) {
+		fmt.Printf("not sampled (rate %.2f)\n", *rate)
+		return 0
+	}
+
+	pol, err := policy.Load(e.repo)
+	if err != nil {
+		return fail(err)
+	}
+	id := rl.Tree
+	if len(id) > 12 {
+		id = id[:12]
+	}
+	s := calibrate.FromReadingList(rl, version, pol, id, time.Now())
+	if len(s.Spans) == 0 {
+		fmt.Println("nothing cleared in this changeset; nothing to review")
+		return 0
+	}
+	if err := calibrate.Save(e.repo, s); err != nil {
+		return fail(err)
+	}
+	fmt.Printf("sampled %s — %d cleared span(s) awaiting review\n", s.ID, len(s.Spans))
+	fmt.Printf("  pawl review %s\n", s.ID)
+	return 0
+}
+
+// cmdReview drives the two-phase review (AC2, AC3, AC7).
+func cmdReview(args []string) int {
+	fs := flag.NewFlagSet("review", flag.ContinueOnError)
+	var (
+		repo     = fs.String("repo", ".", "Repository root.")
+		list     = fs.Bool("list", false, "List samples awaiting review.")
+		span     = fs.String("span", "", "Span to judge, as path:start-end.")
+		verdict  = fs.String("verdict", "", "correct | false_clear")
+		claimID  = fs.String("claim", "", "Claim to attribute a cause to.")
+		cause    = fs.String("cause", "", "claim_false | claim_incomplete | anchor_wrong | evidence_hollow")
+		reviewer = fs.String("reviewer", "", "Who reviewed this.")
+	)
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "usage: pawl review --list")
+		fmt.Fprintln(fs.Output(), "       pawl review <id>")
+		fmt.Fprintln(fs.Output(), "       pawl review <id> --span <path:a-b> --verdict <v> --reviewer <who>")
+		fmt.Fprintln(fs.Output(), "       pawl review <id> --span <path:a-b> --claim <id> --cause <c>")
+		fs.PrintDefaults()
+	}
+	id, args := takeLeadingPositional(args)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	if *list {
+		samples, err := calibrate.LoadAll(*repo)
+		if err != nil {
+			return fail(err)
+		}
+		if len(samples) == 0 {
+			fmt.Println("no samples")
+			return 0
+		}
+		for _, s := range samples {
+			state := "reviewed"
+			if !s.Phase1Complete() {
+				state = fmt.Sprintf("%d span(s) pending", len(s.Pending()))
+			}
+			fmt.Printf("  %s  %s  %s\n", s.ID, s.TS.Format("2006-01-02"), state)
+		}
+		return 0
+	}
+
+	if id == "" {
+		id = fs.Arg(0)
+	}
+	if id == "" {
+		fs.Usage()
+		return 2
+	}
+	s, err := calibrate.Load(*repo, id)
+	if err != nil {
+		return fail(err)
+	}
+
+	switch {
+	case *span != "" && *verdict != "":
+		path, start, end, err := parseSpan(*span)
+		if err != nil {
+			return fail(err)
+		}
+		if err := s.RecordVerdict(path, start, end, calibrate.Verdict(*verdict), *reviewer, time.Now()); err != nil {
+			return fail(err)
+		}
+	case *span != "" && *cause != "":
+		path, start, end, err := parseSpan(*span)
+		if err != nil {
+			return fail(err)
+		}
+		if err := s.RecordCause(path, start, end, *claimID, calibrate.Cause(*cause)); err != nil {
+			return fail(err)
+		}
+	default:
+		return showSample(s)
+	}
+
+	if err := calibrate.Save(*repo, s); err != nil {
+		return fail(err)
+	}
+	return showSample(s)
+}
+
+// showSample renders the review. Claim ids are withheld until every span has a
+// verdict (AC7) — a reviewer who has read the claim cannot then judge the code
+// independently of it.
+func showSample(s calibrate.Sample) int {
+	fmt.Printf("sample %s  tree %s  pawl %s\n", s.ID, s.Tree[:min(12, len(s.Tree))], s.ToolVersion)
+	fmt.Println()
+
+	if !s.MayRevealClaims() {
+		fmt.Println("PHASE 1 — read each span and judge it WITHOUT seeing what was claimed.")
+		fmt.Println("Ask only: did anything here need a human?")
+		fmt.Println()
+	}
+	for _, sp := range s.Spans {
+		state := string(sp.Reviewed)
+		if sp.Reviewed == calibrate.VerdictPending {
+			state = "pending"
+		}
+		fmt.Printf("  %s:%d-%d  [%s] %s\n", sp.Path, sp.StartLine, sp.EndLine, sp.Verdict, state)
+		if s.MayRevealClaims() && len(sp.ClaimIDs) > 0 {
+			fmt.Printf("      claims: %s\n", strings.Join(sp.ClaimIDs, ", "))
+		}
+		for _, c := range sp.Causes {
+			fmt.Printf("      cause: %s (%s)\n", c.Cause, c.ClaimID)
+		}
+	}
+	fmt.Println()
+	if !s.MayRevealClaims() {
+		fmt.Printf("%d span(s) still need a verdict. Claims stay hidden until they have one.\n", len(s.Pending()))
+		fmt.Println("  pawl review " + s.ID + " --span <path:a-b> --verdict correct|false_clear --reviewer <who>")
+	} else if len(s.FalseClears()) > 0 {
+		fmt.Println("PHASE 2 — claims revealed. Attribute each false clear:")
+		fmt.Println("  pawl review " + s.ID + " --span <path:a-b> --claim <id> --cause <cause>")
+	} else {
+		fmt.Println("review complete: no false clears")
+	}
+	return 0
+}
+
+func parseSpan(s string) (string, int, int, error) {
+	i := strings.LastIndex(s, ":")
+	if i < 0 {
+		return "", 0, 0, fmt.Errorf("expected path:start-end, got %q", s)
+	}
+	start, end, err := parseLineRange(s[i+1:])
+	if err != nil {
+		return "", 0, 0, err
+	}
+	return s[:i], start, end, nil
+}
+
+// cmdCalibrate reports the rate (AC4-AC6).
+func cmdCalibrate(args []string) int {
+	fs := flag.NewFlagSet("calibrate", flag.ContinueOnError)
+	repo := fs.String("repo", ".", "Repository root.")
+	asJSON := fs.Bool("json", false, "Emit the report as JSON.")
+	since := fs.String("since", "", "Only samples on or after this date (YYYY-MM-DD).")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	samples, err := calibrate.LoadAll(*repo)
+	if err != nil {
+		return fail(err)
+	}
+	if *since != "" {
+		cutoff, err := time.Parse("2006-01-02", *since)
+		if err != nil {
+			return fail(fmt.Errorf("bad --since date: %w", err))
+		}
+		var kept []calibrate.Sample
+		for _, s := range samples {
+			if !s.TS.Before(cutoff) {
+				kept = append(kept, s)
+			}
+		}
+		samples = kept
+	}
+
+	rep := calibrate.Summarise(samples)
+	if *asJSON {
+		b, err := json.MarshalIndent(rep, "", "  ")
+		if err != nil {
+			return fail(err)
+		}
+		fmt.Println(string(b))
+		return 0
+	}
+
+	fmt.Printf("%d sample(s), %d reviewed span(s), %d pending review\n",
+		rep.Samples, rep.ReviewedSpans, rep.PendingReview)
+	if rep.ReviewedSpans == 0 {
+		fmt.Println("\nno reviewed spans yet; there is no rate to report")
+		return 0
+	}
+	fmt.Printf("false-clear rate: %.1f%% (%d of %d)\n",
+		rep.FalseClearRate*100, rep.FalseClears, rep.ReviewedSpans)
+
+	if len(rep.ByRole) > 0 {
+		fmt.Println("\nBY AUTHOR ROLE")
+		for _, role := range sortedKeys(rep.ByRole) {
+			e := rep.ByRole[role]
+			fmt.Printf("  %-14s %.1f%%  (%d of %d)\n", role, e.Rate*100, e.FalseClears, e.Spans)
+		}
+	}
+	if len(rep.ByCause) > 0 {
+		fmt.Println("\nBY CAUSE")
+		for _, c := range sortedKeysInt(rep.ByCause) {
+			fmt.Printf("  %-20s %d\n", c, rep.ByCause[c])
+		}
+	}
+	if len(rep.ToolVersions) > 1 {
+		fmt.Printf("\nNOTE: samples span %d pawl versions (%s). Verdicts change between\n",
+			len(rep.ToolVersions), strings.Join(rep.ToolVersions, ", "))
+		fmt.Println("versions, so this rate mixes verifiers and needs qualifying.")
+	}
+	return 0
+}
+
+func sortedKeys(m map[string]calibrate.RoleRate) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortedKeysInt(m map[string]int) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func parseLineRange(s string) (int, int, error) {

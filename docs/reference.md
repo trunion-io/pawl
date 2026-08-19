@@ -11,6 +11,9 @@
 | `pawl attest` | CI | Emits the in-toto Statement for signing |
 | `pawl gate` | CI | Evaluates the policy pack, exits 1 on violation |
 | `pawl prune` | After a merge | Removes record files an attestation already embeds |
+| `pawl sample` | CI, after a gate passes | Selects this changeset for calibration review |
+| `pawl review` | Reviewer, by hand | Two-phase review of a sampled changeset |
+| `pawl calibrate` | Anywhere | Reports the false-clear rate |
 | `pawl version` | Anywhere | Prints version and platform |
 
 `pawl <command> -h` lists the flags for any command.
@@ -232,6 +235,102 @@ Three things bound what this can do:
 Rules live in your policy file for the same reason the thresholds do: they
 decide what escapes human attention, so they are yours, and a change to them
 belongs in a reviewed diff. They cannot be set from the environment.
+
+## Calibration
+
+If pawl is doing its job, humans read a small fraction of hunks — so there is no
+ongoing signal on whether the trail is *accurate*. Left alone, the trail becomes
+ritual, agents learn to emit whatever passes the checker, and it surfaces during
+an incident.
+
+Calibration forces a full human read on a randomly selected **cleared** changeset
+and records whether the trail was faithful to what the diff actually did.
+
+### `pawl sample`
+
+```bash
+pawl sample --base origin/main --junit junit.xml --rate 0.05
+```
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--rate` | `0.05` | Fraction of cleared changesets to sample |
+| `--force` | off | Sample regardless of the rate |
+
+Selection is **derived from the changeset's tree hash**, not from fresh
+randomness. The same changeset always gets the same answer, so re-running is
+idempotent rather than another attempt at not being sampled.
+
+Acknowledged spans are sampled alongside cleared ones. An acknowledgement
+asserts there was nothing to assume, and an assertion nobody checks is exactly
+what this tool exists to refuse.
+
+### `pawl review` — two phases, and the order is enforced
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--list` | off | Samples awaiting review |
+| `--span` | none | The span to judge, as `path:start-end` |
+| `--verdict` | none | `correct` or `false_clear` |
+| `--claim` | none | Phase 2: the claim to attribute a cause to |
+| `--cause` | none | `claim_false`, `claim_incomplete`, `anchor_wrong`, `evidence_hollow` |
+| `--reviewer` | none | Who reviewed it |
+
+**Phase 1 is blind.** You see the spans and the code; you do not see what was
+claimed. Answer only: did anything here need a human?
+
+```bash
+pawl review <id>                                     # spans, no claims
+pawl review <id> --span src/a.go:4-6 --verdict correct --reviewer rich
+```
+
+**Phase 2 unlocks only when every span has a verdict.** Attempting it early is
+refused, not discouraged — a claim is a plausible story about the code, and
+having read it first makes it very hard to conclude the code needed attention
+anyway.
+
+```bash
+pawl review <id> --span src/a.go:4-6 --claim abc123 --cause evidence_hollow
+```
+
+### The causes, and who owns them
+
+| Cause | Meaning | Owner |
+|---|---|---|
+| `claim_false` | The claim asserts something untrue | Agent |
+| `claim_incomplete` | True, but did not address what needed review | Agent |
+| `anchor_wrong` | Bound to a span it does not describe | **pawl defect** |
+| `evidence_hollow` | The cited check passes but does not exercise the claim | **Tool blind spot** |
+
+Separating them is what makes the number actionable. "Improve the agents" and
+"fix the anchoring" are different projects, and one rate cannot tell them apart.
+
+`evidence_hollow` is the one only a human read can ever find: pawl can check that
+a check exists and passed, never that it is *meaningful*.
+
+### `pawl calibrate`
+
+```bash
+pawl calibrate [--since 2026-01-01] [--json]
+```
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--since` | none | Only samples on or after this date (`YYYY-MM-DD`) |
+| `--json` | off | Machine-readable report |
+| `--repo` | `.` | Repository root |
+
+Reports the false-clear rate, broken down by author role and by cause.
+
+**Only reviewed spans count.** An unreviewed span is evidence that nobody
+looked, not that clearing was right — counting it as correct would let the number
+improve by sampling more and reviewing less.
+
+The role breakdown is the handover curve: the rate on client-authored changesets
+falling over time is the leading indicator that an engagement is finishable.
+
+If the corpus spans multiple pawl versions the report says so. Verdicts change
+between versions, so a rate mixing verifiers needs qualifying.
 
 ## Claim kinds
 
