@@ -150,6 +150,7 @@ pawl setup claude --uninstall  # remove pawl's hook, leave everything else
 | Flag | Default | Notes |
 |---|---|---|
 | `--dir` | your home directory | Install into `<dir>/.claude/settings.json` |
+| `--check` | off | Report whether an installation is present **and actually works** |
 | `--dry-run` | off | Print the resulting settings; write nothing |
 | `--uninstall` | off | Remove pawl's hook only |
 
@@ -198,6 +199,26 @@ It reformats the file, because the JSON is re-encoded — content is preserved,
 key order is not. Check the backup if you want the original layout.
 
 Open `/hooks` once, or restart, for the harness to pick it up.
+
+### Checking it actually works
+
+```bash
+pawl setup claude --check
+```
+
+The hook is required never to break an edit loop, so it stays silent when
+anything goes wrong — which means **a broken installation looks exactly like a
+working one with nothing to report**. This is what tells them apart:
+
+```
+installed in /home/you/.claude/settings.json
+  CANNOT RUN pawl hook claude-code
+```
+
+That failure is real and was hit here: the entry named a bare `pawl`, which
+resolves only on the PATH the harness hands its hooks. Installs now write the
+**absolute path** of the binary, and re-running `pawl setup claude` repairs an
+older entry rather than skipping it as already present.
 
 ### Checking the hook works
 
