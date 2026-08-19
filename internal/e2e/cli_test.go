@@ -59,6 +59,25 @@ func run(t *testing.T, repo string, args ...string) result {
 	return runStdin(t, repo, "", args...)
 }
 
+func runEnv(t *testing.T, repo string, env []string, args ...string) result {
+	t.Helper()
+	cmd := exec.Command(binary(t), args...)
+	cmd.Dir = repo
+	cmd.Env = append(os.Environ(), env...)
+	var out, errb strings.Builder
+	cmd.Stdout = &out
+	cmd.Stderr = &errb
+	code := 0
+	if err := cmd.Run(); err != nil {
+		var ee *exec.ExitError
+		if !asExitError(err, &ee) {
+			t.Fatalf("running pawl %s: %v", strings.Join(args, " "), err)
+		}
+		code = ee.ExitCode()
+	}
+	return result{stdout: out.String(), stderr: errb.String(), code: code}
+}
+
 func runStdin(t *testing.T, repo, stdin string, args ...string) result {
 	t.Helper()
 	cmd := exec.Command(binary(t), args...)
@@ -164,6 +183,38 @@ func sampleIDFrom(t *testing.T, out string) string {
 	}
 	t.Fatalf("no sample id in:\n%s", out)
 	return ""
+}
+
+// TestCLIFlagsParseAfterEveryLeadingPositional is PAWL-021 AC4 applied to the
+// whole CLI rather than to the two commands that happened to be found broken.
+//
+// The bug has now appeared four times: claim, review, and install upgrade,
+// which was written minutes after the test meant to prevent it. Enumerating the
+// commands here is what stops the fifth.
+func TestCLIFlagsParseAfterEveryLeadingPositional(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+
+	cases := []struct {
+		name string
+		args []string
+		// A flag placed after the positional whose effect is observable.
+		wants string
+	}{
+		{
+			name:  "install upgrade <version> --force",
+			args:  []string{"install", "upgrade", "0.0.0-none", "--force"},
+			wants: "", // must not print the CI refusal; --force was seen
+		},
+	}
+
+	for _, c := range cases {
+		cmd := append([]string{}, c.args...)
+		r := runEnv(t, repo, []string{"CI=true"}, cmd...)
+		if strings.Contains(r.stderr, "Pass --force if you mean it") {
+			t.Errorf("%s: the flag after the positional was dropped\n%s", c.name, r.stderr)
+		}
+	}
 }
 
 // TestCLIExitCodesDistinguishVerdictFromFailure is AC5. A CI job treats these

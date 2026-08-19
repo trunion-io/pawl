@@ -103,6 +103,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-019-harness-installation.md` | **built** · `pawl setup claude`, `pawl hook claude-code` · Bash gap moved to PAWL-020 |
 | `PAWL-020-turn-boundary-accounting.md` | **built** · turn-boundary binding · **AC1 needs live verification** |
 
+| `PAWL-023-self-management.md` | **built** · `pawl install verify` / `upgrade` |
 | `PAWL-021-cli-coverage.md` | **built** · subprocess tests for the CLI seam |
 | `PAWL-022-closing-partial-criteria.md` | **built** · extends PAWL-003, PAWL-004, PAWL-006 |
 

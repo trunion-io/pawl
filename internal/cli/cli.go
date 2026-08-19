@@ -41,6 +41,7 @@ import (
 	"trunion.io/pawl/internal/model"
 	"trunion.io/pawl/internal/policy"
 	"trunion.io/pawl/internal/resolve"
+	"trunion.io/pawl/internal/selfmanage"
 )
 
 const usage = `pawl — Provenance of Agent-Written Lines.
@@ -57,6 +58,7 @@ Commands:
   review   Review a sampled changeset. Two phases: verdict, then cause.
   calibrate  Report the false-clear rate over reviewed samples.
   setup    Install pawl's hook into your harness settings.
+  install  Check or upgrade this pawl installation.
   verify   Resolve claims against evidence and print the reading list.
   attest   Emit the in-toto Statement. Sign it with ` + "`cosign attest-blob`" + `.
   gate     Evaluate the policy pack. Exit 1 on violation.
@@ -129,6 +131,8 @@ func Run(args []string, version string) int {
 		return cmdCalibrate(args[1:])
 	case "setup":
 		return cmdSetup(args[1:])
+	case "install":
+		return cmdInstall(args[1:], version)
 	case "hook":
 		return cmdHook(args[1:])
 	case "verify":
@@ -1017,6 +1021,154 @@ func cmdMigrate(args []string) int {
 	}
 	fmt.Printf("migrated %d claim(s) and %d acknowledgement(s)\n", claims, acks)
 	fmt.Println("the legacy logs are removed only because every record was verified present")
+	return 0
+}
+
+// cmdInstall groups the commands about this installation (PAWL-023).
+//
+// `install` is a noun with verbs under it. The first shape considered was
+// `pawl verify install`, which does not survive contact with the CLI: `pawl
+// verify` already means resolve-claims-against-evidence and takes no
+// positional, so a subcommand there would let a typo silently run the wrong
+// thing.
+func cmdInstall(args []string, version string) int {
+	verb, rest := takeLeadingPositional(args)
+	switch verb {
+	case "verify", "validate":
+		return cmdInstallVerify(rest, version)
+	case "upgrade":
+		return cmdInstallUpgrade(rest, version)
+	default:
+		fmt.Fprintln(os.Stderr, "usage: pawl install verify      (validate is accepted too)")
+		fmt.Fprintln(os.Stderr, "       pawl install upgrade [<version>|latest]")
+		return 2
+	}
+}
+
+// cmdInstallVerify answers the three questions asked when something is not
+// working, in one place (AC4): is this binary the published one, is the hook
+// installed, and can the hook's command actually run.
+func cmdInstallVerify(args []string, version string) int {
+	fs := flag.NewFlagSet("install verify", flag.ContinueOnError)
+	dir := fs.String("dir", "", "Where the harness settings live. Defaults to your home directory.")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	r := selfmanage.Verify(version)
+	fmt.Printf("binary   %s\n", r.Path)
+	fmt.Printf("version  %s\n", r.Version)
+
+	bad := false
+	switch r.Status {
+	case selfmanage.Verified:
+		fmt.Printf("checksum ok — matches the published %s\n", r.Expected[:16]+"…")
+	case selfmanage.Mismatch:
+		bad = true
+		fmt.Printf("checksum MISMATCH\n  expected %s\n  got      %s\n", r.Expected, r.Digest)
+		fmt.Println("\nThis binary is not the one published under that version.")
+		fmt.Println("A mismatch is a finding, not a glitch — do not ignore it.")
+	case selfmanage.Unverifiable:
+		fmt.Printf("checksum n/a — %s\n", r.Detail)
+	case selfmanage.Unchecked:
+		bad = true
+		fmt.Printf("checksum UNCHECKED — %s\n", r.Detail)
+		fmt.Println("\nAn unreachable network is not evidence of authenticity, so this is")
+		fmt.Println("reported as unchecked rather than as ok.")
+	}
+
+	base := *dir
+	if base == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			base = home
+		}
+	}
+	if base != "" {
+		fmt.Println()
+		c := harness.Check(base)
+		if !c.Installed {
+			fmt.Printf("hook     not installed in %s\n", c.Path)
+			fmt.Println("         install it with: pawl setup claude")
+		} else {
+			for i, cmd := range c.Commands {
+				status := "ok  "
+				if !c.Working[i] {
+					status = "BROKEN"
+					bad = true
+				}
+				fmt.Printf("hook     %s %s\n", status, cmd)
+			}
+		}
+	}
+	if bad {
+		return 1
+	}
+	return 0
+}
+
+func cmdInstallUpgrade(args []string, version string) int {
+	// The version comes first, so it must be taken off before parsing: flag
+	// stops at the first non-flag argument and everything after it is ignored.
+	// This is the fourth time that bug has appeared in this file.
+	target, args := takeLeadingPositional(args)
+
+	fs := flag.NewFlagSet("install upgrade", flag.ContinueOnError)
+	force := fs.Bool("force", false, "Upgrade even in CI, where pinning is the point.")
+	dir := fs.String("dir", "", "Where the harness settings live, for repairing the hook afterwards.")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if target == "" {
+		target = fs.Arg(0)
+	}
+
+	// AC10: a CI job that upgrades itself has silently unpinned the thing the
+	// client pinned, and the version that runs decides whether their changesets
+	// merge.
+	if selfmanage.InCI() && !*force {
+		fmt.Fprintln(os.Stderr, "this looks like CI, where pawl should be pinned rather than upgraded:")
+		fmt.Fprintln(os.Stderr, "the version that runs decides whether a changeset merges, so upgrading")
+		fmt.Fprintln(os.Stderr, "here silently unpins what was pinned. Pass --force if you mean it.")
+		return 2
+	}
+
+	if target == "" || target == "latest" {
+		latest, err := selfmanage.LatestVersion()
+		if err != nil {
+			return fail(fmt.Errorf("resolving the latest release: %w", err))
+		}
+		target = latest
+	}
+	target = strings.TrimPrefix(target, "v")
+
+	if target == version {
+		fmt.Printf("already on %s\n", version)
+		return 0
+	}
+	fmt.Printf("upgrading %s -> %s\n", version, target)
+
+	path, err := selfmanage.Upgrade(target)
+	if err != nil {
+		return fail(err)
+	}
+	fmt.Printf("replaced %s\n", path)
+
+	// AC9: the hook names an absolute path, so an upgrade that moved the binary
+	// would leave it pointing at nothing and failing silently on every edit.
+	base := *dir
+	if base == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			base = home
+		}
+	}
+	if base != "" {
+		if p, err := harness.Install(base); err == nil && !p.AlreadySet {
+			if err := p.Apply(); err == nil {
+				fmt.Println("repaired the harness hook to point at the new binary")
+			}
+		}
+	}
+	fmt.Println("\nConfirm with: pawl install verify")
 	return 0
 }
 

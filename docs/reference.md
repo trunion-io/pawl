@@ -16,6 +16,7 @@
 | `pawl review` | Reviewer, by hand | Two-phase review of a sampled changeset |
 | `pawl calibrate` | Anywhere | Reports the false-clear rate |
 | `pawl setup` | Once, per machine | Installs pawl's hook into your harness settings |
+| `pawl install` | Anywhere | Verify or upgrade this pawl installation |
 | `pawl version` | Anywhere | Prints version and platform |
 
 `pawl <command> -h` lists the flags for any command.
@@ -470,6 +471,72 @@ falling over time is the leading indicator that an engagement is finishable.
 
 If the corpus spans multiple pawl versions the report says so. Verdicts change
 between versions, so a rate mixing verifiers needs qualifying.
+
+## `pawl install`
+
+### `pawl install verify`
+
+```bash
+pawl install verify [--dir <path>]
+```
+
+Answers the three questions asked when something is not working, in one place:
+**is this binary the one that was published**, is the hook installed, and can
+the hook's command actually run.
+
+```
+binary   /home/you/.local/bin/pawl
+version  0.1.0
+checksum ok — matches the published a3f19c02b1d4e8a7…
+
+hook     ok   /home/you/.local/bin/pawl hook claude-code
+hook     ok   /home/you/.local/bin/pawl hook claude-code --event stop
+```
+
+Four outcomes for the checksum, and the distinctions matter:
+
+| | Meaning |
+|---|---|
+| `ok` | The running binary matches the checksum published for its version |
+| `MISMATCH` | It does not. **A finding, not a glitch** |
+| `n/a` | A development build, which has no published checksum and never will |
+| `UNCHECKED` | The checksums could not be fetched |
+
+**`UNCHECKED` is never reported as ok.** An unreachable network is not evidence
+of authenticity, and reporting success because a check could not run is the
+asserted-but-missing-check failure this tool exists to refuse, turned on itself.
+
+`validate` is accepted as a synonym for `verify`.
+
+### `pawl install upgrade`
+
+```bash
+pawl install upgrade            # latest
+pawl install upgrade 0.2.0      # a specific version
+```
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--force` | off | Upgrade in CI, where pinning is the point |
+| `--dir` | your home directory | Where to repair the harness hook afterwards |
+
+It downloads, **verifies against the published checksum before replacing
+anything**, and aborts leaving the existing binary in place on a mismatch. A
+tool that can replace itself is a tool that can be made to replace itself with
+something else; that check is the whole of what makes this acceptable in
+something that decides what merges.
+
+The replacement is atomic, so the binary on your `PATH` is always a whole one.
+Afterwards it repairs the harness hook, which names an absolute path and would
+otherwise be left pointing at nothing.
+
+**It refuses to run in CI** unless forced. PAWL-013 tells clients to pin by
+digest because the version that runs decides whether their changesets merge; a
+CI job that upgrades itself has silently unpinned what was pinned.
+
+A downgrade is an upgrade — `pawl install upgrade 0.1.0` from 0.2.0 does what
+you asked. The name is conventional rather than accurate, and pinning backwards
+is legitimate given that verdict-affecting changes are MAJOR.
 
 ## Claim kinds
 
