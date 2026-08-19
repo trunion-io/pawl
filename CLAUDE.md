@@ -30,9 +30,11 @@ taxonomy that was blocking it is **settled** — two axes, binary verdict per sp
 plus a cause per (span, claim) pair — so it is ready to build. It is the largest
 item on this list and the only one on the critical path to the demo.
 
-**PAWL-008 is also unblocked** and its first half needs no harness at all: the
-acknowledgement record and the gate distinction (AC2–AC6) are buildable and
-testable in the CLI today. Do that before touching a hook.
+PAWL-008's CLI half is built. The next thing to build is
+[`PAWL-016`](./_spec/PAWL-016-edit-time-accounting-hook.md) — `pawl pending` plus
+a Claude Code hook — because **PAWL-007 has almost nothing to sample until a
+corpus exists**: this repo clears 6.9% of its own changed lines and 79% carry no
+record at all. Claims at volume come first, then sampling means something.
 
 Other unblocked work, in rough order of value:
 

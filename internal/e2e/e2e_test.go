@@ -660,6 +660,137 @@ func TestAcknowledgementsAreStoredApartFromClaims(t *testing.T) {
 	}
 }
 
+func pending(t *testing.T, repo string, paths ...string) []resolve.PendingSpan {
+	t.Helper()
+	claims, err := claimlog.Load(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spans, err := resolve.Pending(repo, claims, acks, paths)
+	if err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	return spans
+}
+
+// TestPendingReportsUncommittedUnaccountedSpans covers PAWL-016 AC1 and AC2.
+// The edit is deliberately NOT committed — that is the moment a hook fires.
+func TestPendingReportsUncommittedUnaccountedSpans(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo) // uncommitted
+
+	spans := pending(t, repo)
+	if len(spans) == 0 {
+		t.Fatal("expected pending spans for an uncommitted, unaccounted edit")
+	}
+	for _, s := range spans {
+		if s.Path != "src/auth.py" {
+			t.Errorf("unexpected path %q", s.Path)
+		}
+	}
+}
+
+// TestPendingClearsWhenAccounted covers AC1 from the other side: both record
+// types remove a span from the pending list, and neither needs evidence (AC3).
+func TestPendingClearsWhenAccounted(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+
+	before := len(pending(t, repo))
+	if before == 0 {
+		t.Fatal("nothing pending to begin with")
+	}
+
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "exp is unix seconds",
+		Path: "src/auth.py", StartLine: 4, EndLine: 6,
+	})
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 8, EndLine: 9})
+
+	after := pending(t, repo)
+	for _, s := range after {
+		for line := s.StartLine; line <= s.EndLine; line++ {
+			if (4 <= line && line <= 6) || (8 <= line && line <= 9) {
+				t.Errorf("line %d is accounted for but still pending", line)
+			}
+		}
+	}
+	if len(after) >= before {
+		t.Errorf("pending did not shrink: %d -> %d", before, len(after))
+	}
+}
+
+// TestPendingReturnsWhenARecordDrifts applies C-4 at edit time: a record whose
+// fingerprint no longer matches has stopped describing this code, so its span
+// is pending again.
+func TestPendingReturnsWhenARecordDrifts(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 4, EndLine: 6})
+
+	if covered := pending(t, repo); spansCover(covered, 4) {
+		t.Fatal("acknowledged span should not be pending yet")
+	}
+
+	// Rewrite the acknowledged code.
+	mustWrite(t, filepath.Join(repo, "src", "auth.py"),
+		"def noop():\n    return None\n\ndef verify_token(t, n):\n    return True\n")
+
+	if !spansCover(pending(t, repo), 4) {
+		t.Error("a drifted acknowledgement must leave its span pending again")
+	}
+}
+
+// TestPendingRespectsPathFilter — a hook firing on one edit does not want the
+// whole tree.
+func TestPendingRespectsPathFilter(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	mustWrite(t, filepath.Join(repo, "src", "other.py"), "x = 1\ny = 2\n")
+
+	all := pending(t, repo)
+	filtered := pending(t, repo, "src/other.py")
+
+	if len(filtered) == 0 {
+		t.Fatal("expected pending spans for the filtered path")
+	}
+	for _, s := range filtered {
+		if s.Path != "src/other.py" {
+			t.Errorf("filter leaked %q", s.Path)
+		}
+	}
+	if len(filtered) >= len(all) {
+		t.Error("filtered result should be a subset")
+	}
+}
+
+// TestPendingExcludesTheClaimLog — the records must not generate work for
+// themselves, or accounting never terminates.
+func TestPendingExcludesTheClaimLog(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 4, EndLine: 9})
+
+	for _, s := range pending(t, repo) {
+		if strings.HasPrefix(s.Path, ".pawl/") {
+			t.Errorf("the record log is itself pending: %s", s.Path)
+		}
+	}
+}
+
+func spansCover(spans []resolve.PendingSpan, line int) bool {
+	for _, s := range spans {
+		if s.StartLine <= line && line <= s.EndLine {
+			return true
+		}
+	}
+	return false
+}
+
 func verdicts(rl model.ReadingList) []model.SpanVerdict {
 	var out []model.SpanVerdict
 	for _, s := range rl.Spans {

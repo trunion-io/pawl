@@ -82,7 +82,61 @@ func ChangedHunks(repo, base, head string, excludes []string) ([]model.Hunk, err
 	if err != nil {
 		return nil, err
 	}
+	return parseHunks(diff, excludes), nil
+}
 
+// WorktreeHunks returns changed line spans in the working tree relative to HEAD,
+// staged or not.
+//
+// This is the edit-time question — "what have I changed and not yet committed?"
+// — as opposed to ChangedHunks' PR-time question. PAWL-016 needs it because a
+// hook fires while the edit is still uncommitted.
+func WorktreeHunks(repo string, excludes []string) ([]model.Hunk, error) {
+	if excludes == nil {
+		excludes = DefaultExcludes
+	}
+	diff, err := run(repo, "diff", "--unified=0", "--no-color", "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	hunks := parseHunks(diff, excludes)
+
+	// `git diff HEAD` does not mention untracked files, so a brand new file
+	// would report nothing pending and an agent creating one would never be
+	// asked to account for it — the largest possible accounting gap, hiding in
+	// the most ordinary action.
+	//
+	// Listing them separately keeps the index untouched, which matters: a hook
+	// runs on every edit and must not mutate git state as a side effect.
+	// --exclude-standard honours .gitignore, so build output and the record log
+	// stay out.
+	untracked, err := run(repo, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return hunks, nil // best effort; a hook must still get the tracked spans
+	}
+	for _, path := range strings.Split(untracked, "\n") {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		skip := false
+		for _, prefix := range excludes {
+			if strings.HasPrefix(path, prefix) {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
+		if lines := ReadWorktree(repo, path); len(lines) > 0 {
+			hunks = append(hunks, model.Hunk{Path: path, StartLine: 1, EndLine: len(lines)})
+		}
+	}
+	return hunks, nil
+}
+
+func parseHunks(diff string, excludes []string) []model.Hunk {
 	var hunks []model.Hunk
 	currentPath := ""
 	for _, line := range strings.Split(diff, "\n") {
@@ -118,7 +172,7 @@ func ChangedHunks(repo, base, head string, excludes []string) ([]model.Hunk, err
 			EndLine:   start + count - 1,
 		})
 	}
-	return hunks, nil
+	return hunks
 }
 
 // ReadFileAt returns nil when the path does not exist at rev, which the anchor

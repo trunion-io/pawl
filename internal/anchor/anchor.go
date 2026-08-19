@@ -54,6 +54,22 @@ func ResolveAck(repo string, ack model.Acknowledgement, rev string) (model.Ancho
 	return ResolveSpan(repo, ack.Path, ack.StartLine, ack.EndLine, ack.Fingerprint, rev)
 }
 
+// ResolveInLines locates a fingerprinted span within lines already read from
+// somewhere — the working tree, in practice (PAWL-016 AC2).
+//
+// Reports ok=false where the fingerprint cannot be found, which callers read as
+// "this record has stopped describing this code". Same judgement C-4 makes about
+// a drifted claim at PR time, applied earlier.
+func ResolveInLines(lines []string, startLine, endLine int, fingerprint string) (start, end int, ok bool) {
+	if spanMatches(lines, startLine, endLine, fingerprint) {
+		return startLine, endLine, true
+	}
+	if s, e, found := relocate(lines, endLine-startLine+1, fingerprint); found {
+		return s, e, true
+	}
+	return 0, 0, false
+}
+
 // ResolveSpan locates a fingerprinted span in the delivered tree.
 func ResolveSpan(repo, path string, startLine, endLine int, fingerprint, rev string) (model.AnchorStatus, *int, *int) {
 	lines := gitutil.ReadFileAt(repo, path, rev)

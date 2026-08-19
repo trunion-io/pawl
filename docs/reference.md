@@ -6,6 +6,7 @@
 |---|---|---|
 | `pawl claim` | Developer machine, from a harness hook | Records one claim against a span of source |
 | `pawl ack` | Developer machine, from a harness hook | Accounts for a changed span that carries nothing to assume |
+| `pawl pending` | Developer machine, from a harness hook | Lists changed spans in the working tree with no record yet |
 | `pawl verify` | CI | Resolves claims against evidence, prints the reading list |
 | `pawl attest` | CI | Emits the in-toto Statement for signing |
 | `pawl gate` | CI | Evaluates the policy pack, exits 1 on violation |
@@ -101,6 +102,47 @@ claims.
 `pawl verify` reports the acknowledgement ratio — of the changed code that
 carried any record at all, the fraction waved through rather than reasoned about.
 A ratio climbing toward 100% means claiming has become box-ticking.
+
+## `pawl pending`
+
+```bash
+pawl pending [--repo .] [--json] [<file>...]
+```
+
+Lists changed spans in the **working tree** that carry neither a claim nor an
+acknowledgement. This is the edit-time question — *"is what I just changed
+accounted for?"* — as opposed to `verify`'s PR-time question.
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--repo` | `.` | Repository root |
+| `--json` | off | Machine-readable, for a harness hook |
+| `--quiet` | off | Print nothing, exit 0 |
+
+Positional arguments restrict the report to those files.
+
+Three things distinguish it from `verify`:
+
+- It works against **uncommitted** changes, including files git does not yet
+  track. A brand new file is entirely pending.
+- It needs **no evidence files**. The tests for an edit made thirty seconds ago
+  have not run yet, and waiting on them would make the command useless at the
+  moment it is wanted.
+- It **always exits 0**, even on failure. It is called from an edit loop, and a
+  tool that breaks your agent when it misbehaves deserves to be uninstalled.
+
+### The Claude Code hook
+
+`hooks/claude-code/pending.sh`, wired in `.claude/settings.json`, runs this after
+every `Edit`, `Write` or `MultiEdit` and reports pending spans back to the agent.
+
+It **informs; it does not enforce**. Enforcement is already the gate's job —
+`max_unclaimed_lines` blocks the merge. What only a hook can do is supply the
+span *at the moment of the edit*, so the answer is evidence rather than a
+reconstruction from a finished diff. That distinction is C-2.
+
+To enable it in a checkout, open `/hooks` once or restart Claude Code — the
+settings watcher only picks up `.claude/` if it existed when the session began.
 
 ## Claim kinds
 

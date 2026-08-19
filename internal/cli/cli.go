@@ -45,6 +45,7 @@ Edit-time claim capture and changeset verification for agentic delivery.
 Commands:
   claim    Record a claim against a span of source. Called from a harness hook.
   ack      Account for a changed span that carries nothing to assume.
+  pending  List changed spans in the working tree that carry no record yet.
   verify   Resolve claims against evidence and print the reading list.
   attest   Emit the in-toto Statement. Sign it with ` + "`cosign attest-blob`" + `.
   gate     Evaluate the policy pack. Exit 1 on violation.
@@ -99,6 +100,8 @@ func Run(args []string, version string) int {
 		return cmdClaim(args[1:])
 	case "ack":
 		return cmdAck(args[1:])
+	case "pending":
+		return cmdPending(args[1:])
 	case "verify":
 		return cmdVerify(args[1:])
 	case "attest":
@@ -289,6 +292,82 @@ func cmdAck(args []string) int {
 		return fail(err)
 	}
 	fmt.Printf("%s  acknowledged  %s:%d-%d\n", recorded.ID, *path, start, end)
+	return 0
+}
+
+// cmdPending is what a harness hook calls after an edit (PAWL-016).
+//
+// It reports unaccounted spans in the working tree and always exits 0 — a hook
+// must never fail an edit loop because the accounting tool had an opinion
+// (AC9). Enforcement is the gate's job, not this command's.
+func cmdPending(args []string) int {
+	fs := flag.NewFlagSet("pending", flag.ContinueOnError)
+	var (
+		repo   = fs.String("repo", ".", "Repository root.")
+		asJSON = fs.Bool("json", false, "Emit pending spans as JSON.")
+		quiet  = fs.Bool("quiet", false, "Print nothing; exit 0 regardless.")
+	)
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "usage: pawl pending [--repo .] [--json] [<file>...]")
+		fmt.Fprintln(fs.Output(), "\nLists changed spans in the working tree carrying neither a")
+		fmt.Fprintln(fs.Output(), "claim nor an acknowledgement. Needs no evidence files.")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	claims, err := claimlog.Load(*repo)
+	if err != nil {
+		return pendingSoftFail(err, *quiet)
+	}
+	acks, err := claimlog.LoadAcks(*repo)
+	if err != nil {
+		return pendingSoftFail(err, *quiet)
+	}
+	spans, err := resolve.Pending(*repo, claims, acks, fs.Args())
+	if err != nil {
+		return pendingSoftFail(err, *quiet)
+	}
+
+	if *quiet {
+		return 0
+	}
+	if *asJSON {
+		b, err := json.MarshalIndent(spans, "", "  ")
+		if err != nil {
+			return pendingSoftFail(err, *quiet)
+		}
+		fmt.Println(string(b))
+		return 0
+	}
+
+	if len(spans) == 0 {
+		fmt.Println("nothing pending: every changed span carries a claim or an acknowledgement")
+		return 0
+	}
+	total := 0
+	for _, s := range spans {
+		total += s.Lines()
+	}
+	fmt.Printf("%d span(s), %d line(s) with no record yet:\n", len(spans), total)
+	for _, s := range spans {
+		fmt.Printf("  %s:%d-%d\n", s.Path, s.StartLine, s.EndLine)
+	}
+	fmt.Println()
+	fmt.Println("Record one of:")
+	fmt.Println("  pawl claim \"<what you assumed>\" --path <file> --lines <a-b> [--verified-by test:<id>]")
+	fmt.Println("  pawl ack --path <file> --lines <a-b>      # nothing to assume here")
+	return 0
+}
+
+// pendingSoftFail reports to stderr and still exits 0. A hook that breaks the
+// edit loop when pawl misbehaves will be uninstalled the first time it does,
+// and would deserve to be (PAWL-016 AC9).
+func pendingSoftFail(err error, quiet bool) int {
+	if !quiet {
+		fmt.Fprintln(os.Stderr, "pawl pending:", err)
+	}
 	return 0
 }
 

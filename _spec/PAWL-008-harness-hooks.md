@@ -109,6 +109,12 @@ degraded into box-ticking, available long before the sampler has enough data.
 `checkable: yes` — timing assertion once built. Note this measures the tool, not
 the agent-attention cost that AC3 bounds.
 
+> **AC1 and AC8 are in tension** — a hook that genuinely *requires* something
+> must refuse to proceed without it, which is blocking. They are reconciled in
+> [PAWL-016](./PAWL-016-edit-time-accounting-hook.md): the hook informs and the
+> gate enforces, and AC1 is satisfied by the pair rather than by the hook alone.
+> Do not resolve it by weakening either criterion here.
+
 ## Non-functional
 
 - **Build order.** The acknowledgement record and the gate distinction (AC2–AC6)
