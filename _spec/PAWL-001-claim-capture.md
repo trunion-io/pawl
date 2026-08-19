@@ -20,7 +20,7 @@ be recovered afterwards, because the diff holds no trace of the path not taken.
 **AC1** — When an agent records a claim, the system shall capture the claim
 text, path, line range, kind, and a content fingerprint of the referenced span
 taken from the working tree.
-`checkable: yes` → `test:tests.test_e2e.test_verified_claim_collapses_its_hunk`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestVerifiedClaimCollapsesItsHunk`
 
 **AC2** — The system shall append claims to a log and shall never rewrite or
 delete an existing entry.
@@ -38,7 +38,7 @@ refuse the claim rather than record it.
 
 **AC5** — The system shall record the author role (agent, expert, client) on
 every claim.
-`checkable: yes` → `test:tests.test_e2e.test_attestation_shape`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestAttestationShape`
 
 ## Non-functional
 

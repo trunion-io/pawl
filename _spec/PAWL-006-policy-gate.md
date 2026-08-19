@@ -22,7 +22,7 @@ target repository and shall fall back to defaults where absent.
 
 **AC2** — The system shall fail a changeset exceeding the configured line
 budget.
-`checkable: yes` → `test:tests.test_e2e.test_gate_blocks_oversized_changeset`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestGateBlocksOversizedChangeset`
 
 **AC3** — The system shall fail a changeset where must-read lines exceed the
 configured ratio.
@@ -30,7 +30,7 @@ configured ratio.
 
 **AC4** — The system shall fail a changeset containing unclaimed changed lines
 above the configured limit, defaulting to zero.
-`checkable: yes` → `test:tests.test_e2e.test_unclaimed_change_never_clears`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestUnclaimedChangeNeverClears`
 
 **AC5** — Where sensitive paths are configured, the system shall require a named
 check on claims touching them and shall not accept implicit coverage.

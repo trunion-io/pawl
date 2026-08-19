@@ -19,16 +19,16 @@ trail would look complete while being wrong.
 
 **AC1** — When resolving a claim against the delivered tree, the system shall
 first check the recorded line range for a fingerprint match.
-`checkable: yes` → `test:tests.test_e2e.test_verified_claim_collapses_its_hunk`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestVerifiedClaimCollapsesItsHunk`
 
 **AC2** — If the recorded range does not match, then the system shall scan the
 file for a span of equal length with a matching fingerprint and report the claim
 as relocated.
-`checkable: yes` → `test:tests.test_e2e.test_claim_relocates_when_code_moves`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestClaimRelocatesWhenCodeMoves`
 
 **AC3** — If no matching span exists, then the system shall report drift and
 mark the claim unverified irrespective of any asserted check.
-`checkable: yes` → `test:tests.test_e2e.test_drifted_claim_is_reported_not_silently_kept`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestDriftedClaimIsReportedNotSilentlyKept`
 
 **AC4** — If the claimed file is absent from the tree, then the system shall
 report the claim as orphaned.

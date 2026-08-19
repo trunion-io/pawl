@@ -19,18 +19,18 @@ occupies that slot.
 
 **AC1** — The system shall emit an in-toto Statement v1 whose subject is the git
 tree and commit, not a built artifact.
-`checkable: yes` → `test:tests.test_e2e.test_attestation_shape`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestAttestationShape`
 
 **AC2** — The system shall use predicate type
 `https://trunion.io/attestations/assumption-trail/v0.1`.
-`checkable: yes` → `test:tests.test_e2e.test_attestation_shape`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestAttestationShape`
 
 **AC3** — The system shall record, per claim, the asserted checks, the resolved
 coverage status, the anchor status and the human-attention verdict.
-`checkable: yes` → `test:tests.test_e2e.test_attestation_shape`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestAttestationShape`
 
 **AC4** — The system shall record a breakdown of claims by author role.
-`checkable: yes` → `test:tests.test_e2e.test_attestation_shape`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestAttestationShape`
 
 **AC5** — The system shall not sign. Signing is `cosign attest-blob` with a CI
 OIDC token.

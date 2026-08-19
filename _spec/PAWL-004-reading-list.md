@@ -20,15 +20,15 @@ mechanically covered.
 **AC1** — The system shall compute verdicts at line granularity and shall
 collapse a verified span even when an unverified span sits within the same diff
 hunk.
-`checkable: yes` → `test:tests.test_e2e.test_partial_collapse_within_a_single_hunk`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestPartialCollapseWithinASingleHunk`
 
 **AC2** — The system shall assign `unclaimed` to any changed line no claim
 covers, and shall never clear it.
-`checkable: yes` → `test:tests.test_e2e.test_unclaimed_change_never_clears`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestUnclaimedChangeNeverClears`
 
 **AC3** — Where a line is covered by both a clearing claim and one needing a
 human, the system shall treat it as needing a human.
-`checkable: yes` → `test:tests.test_e2e.test_partial_collapse_within_a_single_hunk`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestPartialCollapseWithinASingleHunk`
 
 **AC4** — The system shall exclude its own claim log from the changeset it
 analyses.
