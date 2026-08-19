@@ -42,18 +42,32 @@ func relocate(lines []string, length int, fingerprint string) (int, int, bool) {
 
 // Resolve reports where a claim's fingerprint lands in the delivered tree.
 func Resolve(repo string, claim model.Claim, rev string) (model.AnchorStatus, *int, *int) {
-	lines := gitutil.ReadFileAt(repo, claim.Path, rev)
+	return ResolveSpan(repo, claim.Path, claim.StartLine, claim.EndLine, claim.Fingerprint, rev)
+}
+
+// ResolveAck does the same for an acknowledgement.
+//
+// Deliberately the identical mechanism: an acknowledgement that no longer binds
+// to delivered code has stopped describing anything, exactly as a drifted claim
+// has. C-4 does not care which record type failed to anchor.
+func ResolveAck(repo string, ack model.Acknowledgement, rev string) (model.AnchorStatus, *int, *int) {
+	return ResolveSpan(repo, ack.Path, ack.StartLine, ack.EndLine, ack.Fingerprint, rev)
+}
+
+// ResolveSpan locates a fingerprinted span in the delivered tree.
+func ResolveSpan(repo, path string, startLine, endLine int, fingerprint, rev string) (model.AnchorStatus, *int, *int) {
+	lines := gitutil.ReadFileAt(repo, path, rev)
 	if lines == nil {
 		return model.AnchorOrphaned, nil, nil
 	}
 
-	if spanMatches(lines, claim.StartLine, claim.EndLine, claim.Fingerprint) {
-		start, end := claim.StartLine, claim.EndLine
+	if spanMatches(lines, startLine, endLine, fingerprint) {
+		start, end := startLine, endLine
 		return model.AnchorAnchored, &start, &end
 	}
 
-	length := claim.EndLine - claim.StartLine + 1
-	if start, end, ok := relocate(lines, length, claim.Fingerprint); ok {
+	length := endLine - startLine + 1
+	if start, end, ok := relocate(lines, length, fingerprint); ok {
 		return model.AnchorRelocated, &start, &end
 	}
 

@@ -151,13 +151,40 @@ func ResolveClaims(
 	return resolved
 }
 
+// resolvedAck is an acknowledgement located in the delivered tree. Only
+// anchored or relocated acknowledgements count; a drifted one no longer
+// describes delivered code, so its span falls back to unaccounted and reaches a
+// human (C-4).
+type resolvedAck struct {
+	path  string
+	start int
+	end   int
+}
+
+func resolveAcks(repo string, acks []model.Acknowledgement, rev string) []resolvedAck {
+	out := make([]resolvedAck, 0, len(acks))
+	for _, a := range acks {
+		status, start, end := anchor.ResolveAck(repo, a, rev)
+		if status == model.AnchorDrifted || status == model.AnchorOrphaned {
+			continue
+		}
+		out = append(out, resolvedAck{path: a.Path, start: *start, end: *end})
+	}
+	return out
+}
+
 // lineVerdict is the verdict for a single changed line.
 //
 // A line clears only if some claim covers it and no claim over it needs a human.
 // Needs-human always wins the overlap, because the cost of wrongly collapsing a
 // line is an unreviewed defect and the cost of wrongly expanding one is a few
 // seconds of reading.
-func lineVerdict(resolved []model.ResolvedClaim, path string, line int) (model.SpanVerdict, []string) {
+//
+// A claim outranks an acknowledgement in both directions: a clearing claim over
+// an acknowledged line still reads `clear` (it is evidenced, not merely waved
+// through), and a claim needing a human still wins (C-8). An acknowledgement
+// only decides lines no claim covers.
+func lineVerdict(resolved []model.ResolvedClaim, acks []resolvedAck, path string, line int) (model.SpanVerdict, []string) {
 	var over []model.ResolvedClaim
 	for _, rc := range resolved {
 		if rc.Claim.Path != path || rc.AnchoredStart == nil || rc.AnchoredEnd == nil {
@@ -168,6 +195,13 @@ func lineVerdict(resolved []model.ResolvedClaim, path string, line int) (model.S
 		}
 	}
 	if len(over) == 0 {
+		// No claim. An acknowledgement accounts for the line without evidencing
+		// it — distinct from `clear`, and distinct from silence.
+		for _, a := range acks {
+			if a.path == path && a.start <= line && line <= a.end {
+				return model.VerdictAcknowledged, nil
+			}
+		}
 		return model.VerdictUnclaimed, nil
 	}
 	ids := make([]string, 0, len(over))
@@ -203,7 +237,7 @@ func isReviewable(text string) bool {
 }
 
 // spansForHunk splits a hunk into contiguous runs of lines sharing a verdict.
-func spansForHunk(resolved []model.ResolvedClaim, hunk model.Hunk, source []string) []model.ReadSpan {
+func spansForHunk(resolved []model.ResolvedClaim, acks []resolvedAck, hunk model.Hunk, source []string) []model.ReadSpan {
 	var spans []model.ReadSpan
 
 	var runStart, runEnd int
@@ -234,7 +268,7 @@ func spansForHunk(resolved []model.ResolvedClaim, hunk model.Hunk, source []stri
 				continue
 			}
 		}
-		verdict, ids := lineVerdict(resolved, hunk.Path, line)
+		verdict, ids := lineVerdict(resolved, acks, hunk.Path, line)
 		sorted := append([]string(nil), ids...)
 		sort.Strings(sorted)
 
@@ -271,11 +305,25 @@ func BuildReadingList(
 	ev *evidence.Evidence,
 	rev string,
 ) (model.ReadingList, error) {
+	return BuildReadingListWithAcks(repo, base, claims, nil, ev, rev)
+}
+
+// BuildReadingListWithAcks additionally accounts for acknowledged spans
+// (PAWL-008).
+func BuildReadingListWithAcks(
+	repo string,
+	base string,
+	claims []model.Claim,
+	acknowledgements []model.Acknowledgement,
+	ev *evidence.Evidence,
+	rev string,
+) (model.ReadingList, error) {
 	hunks, err := gitutil.ChangedHunks(repo, base, rev, nil)
 	if err != nil {
 		return model.ReadingList{}, err
 	}
 	resolved := ResolveClaims(repo, claims, ev, rev)
+	acks := resolveAcks(repo, acknowledgements, rev)
 
 	spans := []model.ReadSpan{}
 	sourceCache := map[string][]string{}
@@ -283,7 +331,7 @@ func BuildReadingList(
 		if _, ok := sourceCache[hunk.Path]; !ok {
 			sourceCache[hunk.Path] = gitutil.ReadFileAt(repo, hunk.Path, rev)
 		}
-		spans = append(spans, spansForHunk(resolved, hunk, sourceCache[hunk.Path])...)
+		spans = append(spans, spansForHunk(resolved, acks, hunk, sourceCache[hunk.Path])...)
 	}
 
 	tree, err := gitutil.TreeHash(repo, rev)

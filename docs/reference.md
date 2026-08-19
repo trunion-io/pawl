@@ -5,6 +5,7 @@
 | Command | Runs where | Does what |
 |---|---|---|
 | `pawl claim` | Developer machine, from a harness hook | Records one claim against a span of source |
+| `pawl ack` | Developer machine, from a harness hook | Accounts for a changed span that carries nothing to assume |
 | `pawl verify` | CI | Resolves claims against evidence, prints the reading list |
 | `pawl attest` | CI | Emits the in-toto Statement for signing |
 | `pawl gate` | CI | Evaluates the policy pack, exits 1 on violation |
@@ -54,6 +55,52 @@ final code is not evidence of anything.
 
 The span is read from the **working tree**, not from git, because at the moment
 of the edit the change has not been committed. That is the point.
+
+## `pawl ack`
+
+```bash
+pawl ack --path <file> --lines <a-b> [options]
+```
+
+Records that you changed a span and there was **nothing to assume** about it — a
+mechanical edit, a generated file, a test that is itself the evidence for a claim
+elsewhere.
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--path` | required | File, relative to the repo root |
+| `--lines` | required | `40-58`, or `40` for a single line |
+| `--role` | `agent` | `agent`, `expert` or `client` |
+| `--harness` | none | e.g. `claude-code` |
+| `--model` | none | Model identifier |
+| `--identity` | none | Human identity, for `expert`/`client` roles |
+| `--session` | none | Groups records from one working session |
+| `--repo` | `.` | Repository root |
+
+**There is no text argument, deliberately.** Accounting for a trivial span must
+cost you nothing to write, or it will not happen. If you find yourself wanting to
+explain an acknowledgement, that is the signal it should have been a claim.
+
+Acknowledgements are appended to `.pawl/acknowledgements.jsonl` — a **separate
+file** from the claim log, so that nothing can count one as a claim. They never
+appear in the claim count shown to a client, and never in the attestation as
+claims.
+
+### What an acknowledgement does and does not do
+
+- It **collapses** the span, so it does not reach a human.
+- It is **not** `clear`. A cleared span was evidenced; an acknowledged span was
+  waved through, and the two stay distinguishable everywhere.
+- It **does not** rescue an overlapping claim that needs a human. A claim always
+  outranks it.
+- It **stops accounting** for its span if the code changes underneath it, exactly
+  as a drifted claim does. The span reverts to needing a human.
+- It **is sampled**. Acknowledged spans go into the calibration pool, so waving
+  something through that mattered shows up later as a false clear.
+
+`pawl verify` reports the acknowledgement ratio — of the changed code that
+carried any record at all, the fraction waved through rather than reasoned about.
+A ratio climbing toward 100% means claiming has become box-ticking.
 
 ## Claim kinds
 
@@ -112,8 +159,9 @@ real change — but it is noisy on large refactors.
 | verdict | meaning |
 |---|---|
 | `clear` | Claimed and mechanically covered. Collapsed |
+| `acknowledged` | Accounted for by `pawl ack`, not evidenced. Collapsed, and sampled |
 | `unverified` | Claimed, but at least one claim over it needs a human |
-| `unclaimed` | Changed code with no claim at all. Always readable |
+| `unclaimed` | Changed code with no record at all. Always readable |
 
 Verdicts are computed **per line**, not per hunk. A hunk frequently holds one
 span a verified claim covers and another nobody claimed; sending the whole hunk

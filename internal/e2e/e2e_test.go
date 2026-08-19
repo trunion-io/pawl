@@ -462,6 +462,212 @@ func TestAttestationShape(t *testing.T) {
 	}
 }
 
+func ack(t *testing.T, repo string, opts claimlog.AckOptions) model.Acknowledgement {
+	t.Helper()
+	a, err := claimlog.RecordAck(repo, opts)
+	if err != nil {
+		t.Fatalf("record ack: %v", err)
+	}
+	return a
+}
+
+func buildWithAcks(t *testing.T, repo, base string, claims []model.Claim,
+	acks []model.Acknowledgement, ev *evidence.Evidence) model.ReadingList {
+	t.Helper()
+	rl, err := resolve.BuildReadingListWithAcks(repo, base, claims, acks, ev, "HEAD")
+	if err != nil {
+		t.Fatalf("build reading list: %v", err)
+	}
+	return rl
+}
+
+// TestAcknowledgedSpanCollapsesButIsNotAClaim covers PAWL-008 AC2 and AC4.
+//
+// The span must clear, and it must remain distinguishable from a claim-cleared
+// span — the gate and the sampler both need to know which code was evidenced
+// and which was waved through.
+func TestAcknowledgedSpanCollapsesButIsNotAClaim(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 4, EndLine: 9})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rl := buildWithAcks(t, repo, "HEAD~1", nil, acks, collect(t, evidence.Sources{}))
+
+	if !hasVerdict(rl, model.VerdictAcknowledged) {
+		t.Fatalf("expected an acknowledged span, got %v", verdicts(rl))
+	}
+	if hasVerdict(rl, model.VerdictClear) {
+		t.Error("an acknowledgement must not read as `clear` — it is not evidence")
+	}
+	if rl.MustReadLines() != 0 {
+		t.Errorf("acknowledged spans should collapse, %d lines still need a human", rl.MustReadLines())
+	}
+	// AC2: it is not a claim, anywhere.
+	if len(rl.Claims) != 0 {
+		t.Errorf("acknowledgement leaked into the claim corpus: %d claims", len(rl.Claims))
+	}
+	if rl.Summary().Claims != 0 {
+		t.Error("acknowledgement inflated the claim count shown to clients")
+	}
+}
+
+// TestAcknowledgementIsNotSilence covers PAWL-008 AC4's other half: a span with
+// no record at all must still reach a human (C-3).
+func TestAcknowledgementIsNotSilence(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	// Acknowledge only part of the change.
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 4, EndLine: 6})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rl := buildWithAcks(t, repo, "HEAD~1", nil, acks, collect(t, evidence.Sources{}))
+
+	if !hasVerdict(rl, model.VerdictUnclaimed) {
+		t.Error("the unacknowledged remainder must still be unclaimed")
+	}
+	if rl.Summary().UnclaimedLines == 0 {
+		t.Error("unclaimed lines must still be counted; the gate blocks on them")
+	}
+	if policy.Evaluate(rl, policy.Defaults()).Allowed {
+		t.Error("gate must still block when part of the change carries no record")
+	}
+}
+
+// TestClaimOutranksAcknowledgementOnOverlap covers the C-8 interaction. An
+// acknowledgement must never soften a claim that needs a human.
+func TestClaimOutranksAcknowledgementOnOverlap(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	record(t, repo, claimlog.Options{
+		Kind:       model.KindAssumption,
+		Text:       "cites a test that does not exist",
+		Path:       "src/auth.py",
+		StartLine:  4,
+		EndLine:    6,
+		VerifiedBy: testRef("tests.test_auth.test_imaginary"),
+	})
+	// Acknowledge the same span. It must not rescue the failing claim.
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 4, EndLine: 6})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := collect(t, evidence.Sources{JUnit: []string{writeJUnit(t, repo)}})
+	rl := buildWithAcks(t, repo, "HEAD~1", loadClaims(t, repo), acks, ev)
+
+	for _, s := range rl.MustRead() {
+		if s.StartLine <= 4 && 4 <= s.EndLine {
+			return // correct: the span still reaches a human
+		}
+	}
+	t.Error("an acknowledgement must not clear a span whose claim needs a human")
+}
+
+// TestDriftedAcknowledgementStopsAccountingForItsSpan covers C-4 applied to the
+// new record type. If the code changed under it, it no longer describes
+// delivered code and the span falls back to unaccounted.
+func TestDriftedAcknowledgementStopsAccountingForItsSpan(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 4, EndLine: 6})
+
+	// Rewrite the acknowledged code.
+	mustWrite(t, filepath.Join(repo, "src", "auth.py"),
+		"def noop():\n    return None\n\ndef verify_token(t, n):\n    return True\n")
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rl := buildWithAcks(t, repo, "HEAD~1", nil, acks, collect(t, evidence.Sources{}))
+
+	if hasVerdict(rl, model.VerdictAcknowledged) {
+		t.Error("a drifted acknowledgement must not keep accounting for its span")
+	}
+	if rl.MustReadLines() == 0 {
+		t.Error("the span must fall back to needing a human")
+	}
+}
+
+// TestAcknowledgementRatioIsReported covers PAWL-008 AC6 — the early signal that
+// claiming has decayed into box-ticking, available before the sampler has data.
+func TestAcknowledgementRatioIsReported(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	record(t, repo, claimlog.Options{
+		Kind:       model.KindAssumption,
+		Text:       "exp is unix seconds",
+		Path:       "src/auth.py",
+		StartLine:  4,
+		EndLine:    6,
+		VerifiedBy: testRef("tests.test_auth.test_expiry"),
+	})
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 8, EndLine: 9})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := collect(t, evidence.Sources{JUnit: []string{writeJUnit(t, repo)}})
+	rl := buildWithAcks(t, repo, "HEAD~1", loadClaims(t, repo), acks, ev)
+	s := rl.Summary()
+
+	if s.AcknowledgedLines == 0 {
+		t.Fatal("acknowledged lines not counted")
+	}
+	// Ratio is over accounted code, not over all changed code: it measures
+	// claiming quality, not how much unclaimed noise was in the diff.
+	if s.AcknowledgementRatio <= 0 || s.AcknowledgementRatio >= 1 {
+		t.Errorf("ratio = %v, want a fraction between 0 and 1 with both records present",
+			s.AcknowledgementRatio)
+	}
+}
+
+// TestAcknowledgementsAreStoredApartFromClaims covers PAWL-008 AC2 at the
+// storage layer. Two files makes conflation structurally impossible.
+func TestAcknowledgementsAreStoredApartFromClaims(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 4, EndLine: 6})
+
+	claims, err := claimlog.Load(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(claims) != 0 {
+		t.Errorf("acknowledgement appeared in the claim log: %d claims", len(claims))
+	}
+	if _, err := os.Stat(claimlog.AckPath(repo)); err != nil {
+		t.Errorf("acknowledgement log not written: %v", err)
+	}
+}
+
+func verdicts(rl model.ReadingList) []model.SpanVerdict {
+	var out []model.SpanVerdict
+	for _, s := range rl.Spans {
+		out = append(out, s.Verdict)
+	}
+	return out
+}
+
 // TestAttestationRecordsTheToolThatProducedIt covers PAWL-011 AC1, AC2 and AC5.
 //
 // Without this the predicate is anonymous: a signed trail cannot be traced to

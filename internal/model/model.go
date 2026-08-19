@@ -183,6 +183,38 @@ func (c Claim) Overlaps(path string, start, end int) bool {
 	return c.Path == path && !(c.EndLine < start || c.StartLine > end)
 }
 
+// Acknowledgement records that an agent changed a span and had nothing to
+// assume about it (PAWL-008).
+//
+// It is deliberately NOT a ClaimKind. A `trivial` claim kind would land in the
+// claim corpus and in the attestation as a claim, inflating a count shown to
+// clients; the number of claims must mean substantive claims only (AC2).
+//
+// Note what this struct does not have: a text field. AC3 requires that
+// recording an acknowledgement costs an agent no prose, because at 2.5ms
+// startup the tool is not the bottleneck — the agent composing text is. Leaving
+// nowhere to put prose enforces that structurally rather than by convention.
+//
+// An acknowledgement is not silence. It is an assertion that nothing here needed
+// explaining, and like every assertion in this codebase it is recorded, never
+// trusted: acknowledged spans enter the PAWL-007 sample pool, so an
+// over-acknowledging agent surfaces as a rising false-clear rate.
+type Acknowledgement struct {
+	SchemaVersion string    `json:"schema_version"`
+	ID            string    `json:"id"`
+	TS            time.Time `json:"ts"`
+	Path          string    `json:"path"`
+	StartLine     int       `json:"start_line"`
+	EndLine       int       `json:"end_line"`
+	// Fingerprint anchors an acknowledgement exactly as it anchors a claim. If
+	// the code it covered has since changed, the acknowledgement no longer
+	// describes delivered code and the span falls back to unaccounted — C-4
+	// applies here for the same reason it applies to claims.
+	Fingerprint string `json:"fingerprint"`
+	Author      Author `json:"author"`
+	Session     string `json:"session,omitempty"`
+}
+
 type AnchorStatus string
 
 const (
@@ -250,6 +282,12 @@ const (
 	VerdictUnverified SpanVerdict = "unverified"
 	// VerdictClear is claimed and mechanically covered. Collapse it.
 	VerdictClear SpanVerdict = "clear"
+	// VerdictAcknowledged is changed code an agent explicitly recorded as
+	// carrying nothing to assume. It collapses, but it is kept distinct from
+	// `clear` so the gate can tell "an agent looked and said nothing was here"
+	// from "a claim was verified" — and so the sampler knows which spans were
+	// waved through rather than evidenced (PAWL-008 AC4).
+	VerdictAcknowledged SpanVerdict = "acknowledged"
 )
 
 // ReadSpan is a contiguous run of changed lines sharing a verdict.
@@ -280,6 +318,15 @@ type Summary struct {
 	ClaimsNeedingHuman int     `json:"claims_needing_human"`
 	Spans              int     `json:"spans"`
 	UnclaimedLines     int     `json:"unclaimed_lines"`
+	AcknowledgedLines  int     `json:"acknowledged_lines"`
+	// AcknowledgementRatio is acknowledged lines over accounted lines — of the
+	// changed code that carried any record at all, the fraction that was waved
+	// through rather than reasoned about (PAWL-008 AC6).
+	//
+	// It is the first-order signal that claiming has decayed into box-ticking,
+	// and it is available immediately, long before the PAWL-007 sampler has a
+	// corpus large enough to say anything.
+	AcknowledgementRatio float64 `json:"acknowledgement_ratio"`
 }
 
 // ReadingList is the output that matters: the minimum set of lines a human must
@@ -292,10 +339,13 @@ type ReadingList struct {
 	Claims []ResolvedClaim `json:"claims"`
 }
 
+// MustRead is the minimum set a human has to read. Both `clear` and
+// `acknowledged` collapse; they are distinguished for the gate and the sampler,
+// not for the reader.
 func (r ReadingList) MustRead() []ReadSpan {
 	out := make([]ReadSpan, 0, len(r.Spans))
 	for _, s := range r.Spans {
-		if s.Verdict != VerdictClear {
+		if s.Verdict != VerdictClear && s.Verdict != VerdictAcknowledged {
 			out = append(out, s)
 		}
 	}
@@ -333,21 +383,34 @@ func (r ReadingList) Summary() Summary {
 			needing++
 		}
 	}
-	unclaimed := 0
+	unclaimed, acknowledged := 0, 0
 	for _, s := range r.Spans {
-		if s.Verdict == VerdictUnclaimed {
+		switch s.Verdict {
+		case VerdictUnclaimed:
 			unclaimed += s.Lines()
+		case VerdictAcknowledged:
+			acknowledged += s.Lines()
 		}
 	}
 
+	// Accounted = changed code carrying any record at all. Dividing by it rather
+	// than by changed lines keeps the ratio a statement about claiming quality
+	// instead of one about how much unclaimed code happened to be in the diff.
+	var ackRatio float64
+	if accounted := changed - unclaimed; accounted > 0 {
+		ackRatio = round1(100*float64(acknowledged)/float64(accounted)) / 100
+	}
+
 	return Summary{
-		ChangedLines:       changed,
-		MustReadLines:      mustRead,
-		ReductionPct:       reduction,
-		Claims:             len(r.Claims),
-		ClaimsNeedingHuman: needing,
-		Spans:              len(r.Spans),
-		UnclaimedLines:     unclaimed,
+		ChangedLines:         changed,
+		MustReadLines:        mustRead,
+		ReductionPct:         reduction,
+		Claims:               len(r.Claims),
+		ClaimsNeedingHuman:   needing,
+		Spans:                len(r.Spans),
+		UnclaimedLines:       unclaimed,
+		AcknowledgedLines:    acknowledged,
+		AcknowledgementRatio: ackRatio,
 	}
 }
 

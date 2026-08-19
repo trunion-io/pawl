@@ -181,12 +181,12 @@ to pawl:
 ## Known gaps — do not present these as solved
 
 - No calibration sampler. Everything is unmeasured until item 6 exists.
-- **Claiming is prompted, and measured at ~85% of changed lines unclaimed** on
-  this repo's own commits, by an agent explicitly instructed to claim. PAWL-008
-  settles the model — every changed span must carry a claim or an
-  acknowledgement — but it is not built, so the gap is live. Worse, the shipped
-  `max_unclaimed_lines = 0` blocks on those gaps, which pressures an agent to
-  backfill claims against a finished diff: the exact failure C-2 forbids.
+- **Claiming is still prompted at edit time.** PAWL-008's CLI half is built —
+  `pawl ack`, the acknowledgement record, the gate distinction and the ratio —
+  but AC1's hook is not, so nothing yet *requires* an agent to account for a
+  span. Until it does, the ~85% unclaimed rate measured on this repo stands, and
+  `max_unclaimed_lines = 0` keeps pressuring agents to backfill against a
+  finished diff, which is the failure C-2 forbids.
 - **The `spec:` evidence type cannot resolve, and citing it makes a claim
   permanently unverified.** It requires a signed spec attestation, which
   requires the spec tool — PAWL-009, drafted and not built. Found by dogfooding
@@ -196,6 +196,11 @@ to pawl:
   design behaving correctly. **Until PAWL-009 ships, do not cite `spec:`
   evidence** — an assertion that cannot be resolved is the exact
   asserted-but-missing-check antipattern C-1 exists to refuse.
+- **The PAWL-010 AC3 doc-drift check is weaker than the criterion.** Comparing
+  flag *names* between `--help` and `docs/reference.md` passes when a whole new
+  command reuses existing flag names — `pawl ack` was added and slipped through
+  undetected. Any implementation of AC3 in `make check` must compare the command
+  set as well as the flag set.
 - **The CLI itself is untested.** The e2e suite calls the packages directly and
   never invokes `cmd/pawl`. A flag-parsing bug that made `pawl claim` a no-op
   shipped past all ten tests and was caught by hand. Same hole existed in the

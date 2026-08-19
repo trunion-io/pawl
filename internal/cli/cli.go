@@ -44,6 +44,7 @@ Edit-time claim capture and changeset verification for agentic delivery.
 
 Commands:
   claim    Record a claim against a span of source. Called from a harness hook.
+  ack      Account for a changed span that carries nothing to assume.
   verify   Resolve claims against evidence and print the reading list.
   attest   Emit the in-toto Statement. Sign it with ` + "`cosign attest-blob`" + `.
   gate     Evaluate the policy pack. Exit 1 on violation.
@@ -96,6 +97,8 @@ func Run(args []string, version string) int {
 	switch args[0] {
 	case "claim":
 		return cmdClaim(args[1:])
+	case "ack":
+		return cmdAck(args[1:])
 	case "verify":
 		return cmdVerify(args[1:])
 	case "attest":
@@ -232,6 +235,63 @@ func cmdClaim(args []string) int {
 	return 0
 }
 
+// cmdAck records an acknowledgement. Note the absence of a text argument:
+// PAWL-008 AC3 requires that accounting for a trivial span costs an agent no
+// prose, so there is nowhere to put any.
+func cmdAck(args []string) int {
+	fs := flag.NewFlagSet("ack", flag.ContinueOnError)
+	var (
+		path     = fs.String("path", "", "File the acknowledgement is about.")
+		lines    = fs.String("lines", "", "Line range, e.g. 40-58.")
+		role     = fs.String("role", string(model.RoleAgent), "Author role.")
+		harness  = fs.String("harness", "", "e.g. claude-code")
+		modelStr = fs.String("model", "", "Model identifier.")
+		identity = fs.String("identity", "", "Human identity for expert/client roles.")
+		session  = fs.String("session", "", "Session identifier.")
+		repo     = fs.String("repo", ".", "Repository root.")
+	)
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "usage: pawl ack --path <file> --lines <a-b> [options]")
+		fmt.Fprintln(fs.Output(), "\nRecords that a changed span carries nothing to assume.")
+		fmt.Fprintln(fs.Output(), "It is not a claim, and it does not clear a span on evidence —")
+		fmt.Fprintln(fs.Output(), "acknowledged spans are sampled for review.")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *path == "" || *lines == "" {
+		fs.Usage()
+		return 2
+	}
+	authorRole := model.AuthorRole(*role)
+	if !authorRole.Valid() {
+		return fail(fmt.Errorf("unknown author role %q", *role))
+	}
+	start, end, err := parseLineRange(*lines)
+	if err != nil {
+		return fail(err)
+	}
+
+	recorded, err := claimlog.RecordAck(*repo, claimlog.AckOptions{
+		Path:      *path,
+		StartLine: start,
+		EndLine:   end,
+		Author: &model.Author{
+			Role:     authorRole,
+			Harness:  *harness,
+			Model:    *modelStr,
+			Identity: *identity,
+		},
+		Session: *session,
+	})
+	if err != nil {
+		return fail(err)
+	}
+	fmt.Printf("%s  acknowledged  %s:%d-%d\n", recorded.ID, *path, start, end)
+	return 0
+}
+
 func parseLineRange(s string) (int, int, error) {
 	startS, endS, found := strings.Cut(s, "-")
 	start, err := strconv.Atoi(strings.TrimSpace(startS))
@@ -250,6 +310,10 @@ func parseLineRange(s string) (int, int, error) {
 
 func resolveReadingList(e *evidenceFlags) (model.ReadingList, error) {
 	claims, err := claimlog.Load(e.repo)
+	if err != nil {
+		return model.ReadingList{}, err
+	}
+	acks, err := claimlog.LoadAcks(e.repo)
 	if err != nil {
 		return model.ReadingList{}, err
 	}
@@ -278,7 +342,7 @@ func resolveReadingList(e *evidenceFlags) (model.ReadingList, error) {
 	if err != nil {
 		return model.ReadingList{}, err
 	}
-	return resolve.BuildReadingList(e.repo, baseRef, claims, ev, "HEAD")
+	return resolve.BuildReadingListWithAcks(e.repo, baseRef, claims, acks, ev, "HEAD")
 }
 
 func render(w io.Writer, rl model.ReadingList) {
@@ -295,6 +359,10 @@ func render(w io.Writer, rl model.ReadingList) {
 		s.ChangedLines, s.MustReadLines, trimFloat(s.ReductionPct))
 	fmt.Fprintf(w, "%d claims, %d unresolved, %d unclaimed lines\n",
 		s.Claims, s.ClaimsNeedingHuman, s.UnclaimedLines)
+	if s.AcknowledgedLines > 0 {
+		fmt.Fprintf(w, "%d acknowledged lines (%.0f%% of accounted code waved through)\n",
+			s.AcknowledgedLines, s.AcknowledgementRatio*100)
+	}
 
 	mustRead := rl.MustRead()
 	if len(mustRead) == 0 {
