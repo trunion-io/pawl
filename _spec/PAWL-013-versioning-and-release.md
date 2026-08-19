@@ -103,6 +103,40 @@ reproduce byte-for-byte by building the same tag.
 criterion exists so a change that breaks it is a release blocker rather than a
 curiosity.
 
+### The install script
+
+**AC14** — The system shall provide a script that installs a released binary for
+the running platform.
+`checkable: yes` (once built)
+
+**AC15** — The script shall verify the downloaded artifact against the published
+checksum before installing it, and shall refuse to install on a mismatch.
+`checkable: yes` (once built) — **not optional here.** pawl's entire argument is
+that a client can verify what they were given; an installer that skips the check
+would be the tool contradicting its own pitch at the first moment a user meets
+it.
+
+**AC16** — The script shall report when the directory it installed into is not
+on the user's PATH.
+`checkable: yes` (once built) — this failure has already happened, in the hook:
+a configuration naming a binary nothing could find, failing silently on every
+edit. An installer that leaves a binary somewhere unreachable and says nothing
+sets up the same silence.
+
+**AC17** — The script shall accept a version to install, defaulting to the
+latest release.
+`checkable: yes` (once built) — clients pin (see AC6–AC9), and an installer that
+can only fetch latest cannot be used by the people most careful about what they
+run.
+
+**AC18** — The script shall be usable without piping it to a shell.
+`checkable: yes` (once built) — `curl … | bash` is a strange thing for a
+supply-chain assurance tool to ask for: it executes code the user has not read,
+from a URL, as their first interaction. It is offered because refusing to offer
+it changes nothing except how many people adopt the tool — but downloading,
+reading and running must work equally well, and the documentation must show that
+path first.
+
 ## Trunk-based development
 
 **AC12** — The system shall require the full check suite — format, vet, tests,

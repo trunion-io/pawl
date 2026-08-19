@@ -1,0 +1,40 @@
+# PAWL-013 AC12 — the full check suite must pass before merge to main.
+#
+# Trunk-based development with a tool that gates other people's releases cannot
+# tolerate a red main: there is no release branch to cut from instead.
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # fmt, vet and the end-to-end suite. The tests run real git in temporary
+      # repositories (C-9), so nothing extra is needed here.
+      - run: make check
+
+      # PAWL-011 AC11 and PAWL-013 AC11: builds must stay reproducible, and a
+      # change that breaks that is a release blocker rather than a curiosity.
+      - name: Reproducible build
+        shell: bash
+        run: |
+          make dist VERSION=ci-check
+          sha256sum dist/pawl-ci-check-linux-amd64 > first.txt
+          rm -rf dist
+          make dist VERSION=ci-check
+          sha256sum dist/pawl-ci-check-linux-amd64 > second.txt
+          diff <(awk '{print $1}' first.txt) <(awk '{print $1}' second.txt) \
+            || { echo "builds are not reproducible"; exit 1; }

@@ -33,7 +33,7 @@ No modules are downloaded. The one network cost is the pinned Go toolchain in
 | Your stack | Install |
 |---|---|
 | Anything | Download from GitHub Releases, check `SHA256SUMS`, put it on `PATH` |
-| macOS | `brew install trunion/tap/pawl` |
+| macOS | `brew install trunion-io/tap/pawl` |
 | TypeScript | `npx @trunion/pawl` |
 | Python | `uv tool install trunion-pawl` |
 | CI, containerised | `ghcr.io/trunion/pawl:<version>` — `scratch` image, ~5MB |
@@ -54,7 +54,7 @@ release workflow identity.
 
 ```bash
 cosign verify-blob \
-  --certificate-identity-regexp 'https://github.com/trunion/pawl/.*' \
+  --certificate-identity-regexp 'https://github.com/trunion-io/pawl/.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --bundle pawl-0.1.0-linux-amd64.sigstore.json \
   pawl-0.1.0-linux-amd64

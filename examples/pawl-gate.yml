@@ -37,14 +37,14 @@ jobs:
 
       - name: Install pawl
         run: |
-          base="https://github.com/trunion/pawl/releases/download/v${PAWL_VERSION}"
+          base="https://github.com/trunion-io/pawl/releases/download/v${PAWL_VERSION}"
           curl -sSfLO "${base}/pawl-${PAWL_VERSION}-linux-amd64"
           curl -sSfLO "${base}/pawl-${PAWL_VERSION}-linux-amd64.sigstore.json"
 
           # Verify before trusting it. The identity is the release workflow, not
           # a person, and there is no key to have leaked.
           cosign verify-blob \
-            --certificate-identity-regexp 'https://github.com/trunion/pawl/.*' \
+            --certificate-identity-regexp 'https://github.com/trunion-io/pawl/.*' \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --bundle "pawl-${PAWL_VERSION}-linux-amd64.sigstore.json" \
             "pawl-${PAWL_VERSION}-linux-amd64"
