@@ -5,10 +5,15 @@ dist/
 # direnv's per-directory cache. .envrc itself IS committed.
 .direnv/
 
-# pawl's own claim log. Excluded from the diff by gitutil.DefaultExcludes too —
-# counting it would inflate the denominator and put the trail on its own
-# reading list.
-.pawl/
+# NOTE: .pawl/ is deliberately NOT ignored. The claim log and acknowledgement
+# log are part of the changeset and must be committed, or CI reads no records
+# and marks the whole changeset unclaimed. gitutil.DefaultExcludes already keeps
+# them out of the changed-line count, which is the actual problem ignoring them
+# was reaching for.
+#
+# The surfacing cache is the exception: machine-local, rebuildable, and it must
+# never influence a verdict (PAWL-017).
+.pawl/.cache/
 # Evidence generated during a local dogfood run
 junit.xml
 coverage.xml
