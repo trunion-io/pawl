@@ -149,11 +149,6 @@ phases (3, and the commercial half of 4) are tracked in
 
 ## Open decisions blocking work
 
-**PAWL-008 prompted vs enforced claiming.** Prompted produces gaps, enforced
-produces noise. Now cheaper to decide either way: `pawl claim` starts in ~2.5ms,
-so enforced claiming no longer carries a per-edit latency cost worth arguing
-about.
-
 **PAWL-013 supported versions and backports.** Trunk-based development says fix
 forward, but PAWL-013 AC2 makes any verdict-affecting change a MAJOR bump — so
 telling a pinned client to upgrade for a security fix also tells them to accept
@@ -186,6 +181,12 @@ to pawl:
 ## Known gaps — do not present these as solved
 
 - No calibration sampler. Everything is unmeasured until item 6 exists.
+- **Claiming is prompted, and measured at ~85% of changed lines unclaimed** on
+  this repo's own commits, by an agent explicitly instructed to claim. PAWL-008
+  settles the model — every changed span must carry a claim or an
+  acknowledgement — but it is not built, so the gap is live. Worse, the shipped
+  `max_unclaimed_lines = 0` blocks on those gaps, which pressures an agent to
+  backfill claims against a finished diff: the exact failure C-2 forbids.
 - **The `spec:` evidence type cannot resolve, and citing it makes a claim
   permanently unverified.** It requires a signed spec attestation, which
   requires the spec tool — PAWL-009, drafted and not built. Found by dogfooding

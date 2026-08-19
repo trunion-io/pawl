@@ -30,6 +30,10 @@ taxonomy that was blocking it is **settled** — two axes, binary verdict per sp
 plus a cause per (span, claim) pair — so it is ready to build. It is the largest
 item on this list and the only one on the critical path to the demo.
 
+**PAWL-008 is also unblocked** and its first half needs no harness at all: the
+acknowledgement record and the gate distinction (AC2–AC6) are buildable and
+testable in the CLI today. Do that before touching a hook.
+
 Other unblocked work, in rough order of value:
 
 1. **Test the CLI.** The e2e suite drives the packages directly and never
