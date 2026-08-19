@@ -135,9 +135,6 @@ it.
 - **The `spec:` evidence type cannot resolve.** It needs a signed spec
   attestation, which needs the spec tool (PAWL-009, not built). A claim citing
   `spec:` today will never clear — do not use it yet.
-- The CLI is not covered by the test suite; the suite drives the packages
-  directly. A flag-parsing bug that made `pawl claim` a no-op once shipped past
-  all ten tests.
 - Deleted lines produce no span, so "why this went away" has to be claimed
   against surrounding context.
 - The relocation scan is O(file length) per claim; fine at PR scale, wrong for a
@@ -147,8 +144,11 @@ it.
   refactors until there is a rename-aware path.
 - The policy TOML reader is a deliberate subset — no nested tables, arrays of
   tables, inline tables or dates. It rejects rather than misreads.
-- No calibration sampler yet. It is the next thing to build and the only part of
-  this a competitor cannot fork.
+- The calibration sampler exists but the corpus does not. A false-clear rate
+  over a handful of reviewed spans is not a number to quote; that needs sustained
+  real use.
+- Escalation precision is not built. A false-clear rate without it is half a
+  measurement: a tool that escalates everything scores perfectly and is useless.
 
 ## Development
 
@@ -159,7 +159,7 @@ binding.
 
 ```bash
 make help      # list targets
-make check     # fmt + vet + 10 e2e tests against real git repositories
+make check     # fmt + vet + 64 e2e tests against real git repositories
 ```
 
 [`.envrc`](./.envrc) (direnv) puts `./bin` on `PATH` and pins `CGO_ENABLED=0`, so

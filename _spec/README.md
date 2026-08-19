@@ -103,6 +103,8 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-019-harness-installation.md` | **built** · `pawl setup claude`, `pawl hook claude-code` · Bash gap moved to PAWL-020 |
 | `PAWL-020-turn-boundary-accounting.md` | **built** · turn-boundary binding · **AC1 needs live verification** |
 
+| `PAWL-021-cli-coverage.md` | **built** · subprocess tests for the CLI seam |
+
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.
 Treat them as reconstructed intent, not as agreed contracts.

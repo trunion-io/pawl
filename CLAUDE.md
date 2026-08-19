@@ -15,7 +15,7 @@ holds only what is specific to working in pawl.
 cd pawl && make check
 ```
 
-`make check` is fmt + vet + the e2e suite: 59 tests, all must pass before and
+`make check` is fmt + vet + the e2e suite: 64 tests, all must pass before and
 after any change. If they don't pass on a clean checkout, fix that before
 anything else — do not work around it.
 
@@ -40,19 +40,15 @@ fallback if it turns out unreliable.
 
 Other unblocked work, in rough order of value:
 
-1. **Test the CLI.** The e2e suite drives the packages directly and never
-   invokes `cmd/pawl`. A flag-parsing bug that made `pawl claim` a silent no-op
-   shipped past every one of them. A handful of tests that exec the built binary
-   would have caught it.
-2. Close the untested criteria flagged `checkable: partially` in
+1. Close the untested criteria flagged `checkable: partially` in
    [`./_spec/PAWL-004-reading-list.md`](./_spec/PAWL-004-reading-list.md)
    AC4 and AC5 — the claim-log exclusion and the non-semantic-line filter were
    both found in a live demo rather than by the suite, which is the wrong way
    round.
-3. [`./_spec/PAWL-006-policy-gate.md`](./_spec/PAWL-006-policy-gate.md)
+2. [`./_spec/PAWL-006-policy-gate.md`](./_spec/PAWL-006-policy-gate.md)
    AC1, AC3, AC5 — policy file loading, must-read ratio and sensitive paths are
    implemented but untested.
-4. [`./_spec/PAWL-003-coverage-resolution.md`](./_spec/PAWL-003-coverage-resolution.md)
+3. [`./_spec/PAWL-003-coverage-resolution.md`](./_spec/PAWL-003-coverage-resolution.md)
    AC3 — skipped-test handling has no dedicated test.
 
 ## Accounting for what you change
