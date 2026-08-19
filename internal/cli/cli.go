@@ -52,6 +52,7 @@ Commands:
   ack      Account for a changed span that carries nothing to assume.
   pending  List changed spans in the working tree that carry no record yet.
   prune    Remove record files for a changeset that has been attested.
+  migrate  Move records out of a legacy .jsonl log into the per-record layout.
   sample   Select this changeset for calibration review, at the configured rate.
   review   Review a sampled changeset. Two phases: verdict, then cause.
   calibrate  Report the false-clear rate over reviewed samples.
@@ -118,6 +119,8 @@ func Run(args []string, version string) int {
 		return cmdPending(args[1:])
 	case "prune":
 		return cmdPrune(args[1:])
+	case "migrate":
+		return cmdMigrate(args[1:])
 	case "sample":
 		return cmdSample(args[1:], version)
 	case "review":
@@ -987,6 +990,33 @@ func cmdSetup(args []string) int {
 		fmt.Println("Open /hooks once, or restart, for the harness to pick it up.")
 		fmt.Println("It stays silent in repositories that have no .pawl directory.")
 	}
+	return 0
+}
+
+// cmdMigrate moves records out of a legacy log (PAWL-018 AC8).
+func cmdMigrate(args []string) int {
+	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	repo := fs.String("repo", ".", "Repository root.")
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "usage: pawl migrate [--repo .]")
+		fmt.Fprintln(fs.Output(), "\nCopies records from .pawl/*.jsonl into .pawl/claims and .pawl/acks,")
+		fmt.Fprintln(fs.Output(), "then removes the log — but only once every record is confirmed moved.")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	claims, acks, err := claimlog.Migrate(*repo)
+	if err != nil {
+		return fail(err)
+	}
+	if claims == 0 && acks == 0 {
+		fmt.Println("nothing to migrate; no legacy log found")
+		return 0
+	}
+	fmt.Printf("migrated %d claim(s) and %d acknowledgement(s)\n", claims, acks)
+	fmt.Println("the legacy logs are removed only because every record was verified present")
 	return 0
 }
 

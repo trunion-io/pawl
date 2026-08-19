@@ -76,6 +76,26 @@ to per-record files.
 in the old format, and a client mid-adoption will too. Silently ignoring them
 would lose evidence, which is the one thing this component may never do.
 
+**AC8** — The system shall provide a command that copies records from a legacy
+log into the per-record layout without altering them, and shall remove the log
+only once every record it held is present in the new layout.
+`checkable: yes` (once built)
+
+> **This reverses a decision recorded above.** AC6 and the non-functional note
+> said the legacy log is read and left alone, on the grounds that rewriting a
+> shared append-only file is the edit write-once storage exists to prevent.
+>
+> That reasoning does not apply to migration. Copying a record into a new file
+> does not alter the record — the id, timestamp, text and fingerprint are
+> identical, and it is the *container* that changes. What write-once forbids is
+> editing a record's content, which this does not do.
+>
+> The cost of not migrating is two read paths and two layouts in every
+> repository, indefinitely, plus a directory that looks like a mistake. Removing
+> the log only after verifying every record survived is what makes it safe:
+> losing evidence is the one thing this component may never do, so the check is
+> not optional and the removal is not unconditional.
+
 ## Lifecycle
 
 **AC7** — The system shall provide a means of removing the record files for a

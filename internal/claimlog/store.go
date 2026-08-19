@@ -23,6 +23,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"trunion.io/pawl/internal/model"
 )
 
 const (
@@ -159,4 +161,60 @@ func Prune(repo string, ids []string) (removed int, skipped []string, err error)
 		}
 	}
 	return removed, skipped, nil
+}
+
+// Migrate copies records from a legacy JSONL log into the per-record layout
+// (PAWL-018 AC8).
+//
+// The records are not altered — id, timestamp, text and fingerprint are
+// unchanged and it is the container that moves. Write-once forbids editing a
+// record's content, which this does not do.
+//
+// The log is removed only once every record it held is confirmed present in the
+// new layout. Losing evidence is the one thing this component may never do, so
+// the check is not optional and the removal is not unconditional.
+func Migrate(repo string) (claims, acks int, err error) {
+	claims, err = migrateOne[model.Claim](
+		LogPath(repo), claimsDir(repo), func(c model.Claim) string { return c.ID })
+	if err != nil {
+		return 0, 0, err
+	}
+	acks, err = migrateOne[model.Acknowledgement](
+		AckPath(repo), acksDir(repo), func(a model.Acknowledgement) string { return a.ID })
+	if err != nil {
+		return claims, 0, err
+	}
+	return claims, acks, nil
+}
+
+func migrateOne[T any](logPath, dir string, id func(T) string) (int, error) {
+	records, err := readLegacyJSONL[T](logPath)
+	if err != nil {
+		return 0, err
+	}
+	if len(records) == 0 {
+		return 0, nil
+	}
+
+	moved := 0
+	for _, r := range records {
+		if id(r) == "" {
+			return moved, fmt.Errorf("%s: a record has no id; refusing to migrate", logPath)
+		}
+		err := writeRecord(dir, id(r), r)
+		// Already present is success: migration must be safe to re-run.
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return moved, err
+		}
+		moved++
+	}
+
+	// Verify before removing. Every id must now resolve to a file.
+	for _, r := range records {
+		if _, err := os.Stat(filepath.Join(dir, id(r)+".json")); err != nil {
+			return moved, fmt.Errorf(
+				"refusing to remove %s: record %s is not in the new layout", logPath, id(r))
+		}
+	}
+	return moved, os.Remove(logPath)
 }

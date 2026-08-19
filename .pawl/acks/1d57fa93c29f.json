@@ -1,0 +1,1 @@
+{"schema_version":"0.1","id":"1d57fa93c29f","ts":"2026-08-19T16:41:00.228637305Z","path":"internal/claimlog/ack.go","start_line":24,"end_line":70,"fingerprint":"sha256:84e7526969f0a8521e1b6e6056a949d8c2c1dd7c8b46ad94f841473720b812a6","author":{"role":"agent","harness":"claude-code"}}

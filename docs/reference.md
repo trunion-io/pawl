@@ -11,6 +11,7 @@
 | `pawl attest` | CI | Emits the in-toto Statement for signing |
 | `pawl gate` | CI | Evaluates the policy pack, exits 1 on violation |
 | `pawl prune` | After a merge | Removes record files an attestation already embeds |
+| `pawl migrate` | Once, after upgrading | Moves records out of a legacy `.jsonl` log |
 | `pawl sample` | CI, after a gate passes | Selects this changeset for calibration review |
 | `pawl review` | Reviewer, by hand | Two-phase review of a sampled changeset |
 | `pawl calibrate` | Anywhere | Reports the false-clear rate |
@@ -279,8 +280,21 @@ Record files are **written once and never modified**. Re-recording an existing
 id is refused rather than overwriting: an amended record is not evidence of
 anything.
 
-If you still have `.pawl/claims.jsonl` from an earlier version, it is read
-alongside the new layout and left alone. There is no migration to run.
+### `pawl migrate`
+
+```bash
+pawl migrate [--repo .]
+```
+
+If you have `.pawl/claims.jsonl` or `.pawl/acknowledgements.jsonl` from an
+earlier version, they are still read alongside the new layout — nothing breaks
+if you leave them. `pawl migrate` consolidates them into `.pawl/claims/` and
+`.pawl/acks/` so there is one layout rather than two.
+
+The records are not altered: id, timestamp, text and fingerprint are unchanged
+and only the container moves. **The log is removed only once every record it
+held is confirmed present in the new layout** — losing evidence is the one thing
+this must never do, so the check is not optional. Safe to re-run.
 
 ## `pawl prune`
 

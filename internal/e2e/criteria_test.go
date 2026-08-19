@@ -293,3 +293,55 @@ func TestOnlyCheckableSpecCriteriaAreEvidence(t *testing.T) {
 			"and must not clear a span mechanically")
 	}
 }
+
+// TestMigrateMovesRecordsAndOnlyThenRemovesTheLog — PAWL-018 AC8.
+//
+// Losing evidence is the one thing this component may never do, so the log is
+// removed only once every record it held is confirmed present.
+func TestMigrateMovesRecordsAndOnlyThenRemovesTheLog(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	// One record in the new layout, two left in a legacy log.
+	kept := record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "already migrated",
+		Path: "src/auth.py", StartLine: 4, EndLine: 6,
+	})
+	legacy := `{"schema_version":"0.1","id":"legacyA","ts":"2026-01-01T00:00:00Z","kind":"assumption",` +
+		`"text":"first legacy","path":"src/auth.py","start_line":1,"end_line":2,` +
+		`"fingerprint":"sha256:a","verified_by":[],"author":{"role":"agent"}}` + "\n" +
+		`{"schema_version":"0.1","id":"legacyB","ts":"2026-01-02T00:00:00Z","kind":"assumption",` +
+		`"text":"second legacy","path":"src/auth.py","start_line":8,"end_line":9,` +
+		`"fingerprint":"sha256:b","verified_by":[],"author":{"role":"agent"}}` + "\n"
+	mustWrite(t, claimlog.LogPath(repo), legacy)
+
+	claims, _, err := claimlog.Migrate(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims != 2 {
+		t.Errorf("migrated %d claims, want 2", claims)
+	}
+	if _, err := os.Stat(claimlog.LogPath(repo)); !os.IsNotExist(err) {
+		t.Error("the legacy log should be gone once every record moved")
+	}
+
+	// Every record survives, and the content is unchanged — migration moves the
+	// container, never the record.
+	all := loadClaims(t, repo)
+	byID := map[string]string{}
+	for _, c := range all {
+		byID[c.ID] = c.Text
+	}
+	for id, want := range map[string]string{
+		kept.ID: "already migrated", "legacyA": "first legacy", "legacyB": "second legacy",
+	} {
+		if byID[id] != want {
+			t.Errorf("record %s = %q, want %q", id, byID[id], want)
+		}
+	}
+
+	// Safe to re-run.
+	if _, _, err := claimlog.Migrate(repo); err != nil {
+		t.Errorf("migration must be safe to re-run: %v", err)
+	}
+}
