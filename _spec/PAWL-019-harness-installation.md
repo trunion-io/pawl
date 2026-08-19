@@ -167,7 +167,9 @@ important, because a user-level hook fires on every edit in every project.
 
 ## Open question — the Bash gap
 
-Found while testing, and **not resolved by this spec**: the matcher is
+**Resolved in [PAWL-020](./PAWL-020-turn-boundary-accounting.md)**, which binds
+accounting to the turn boundary rather than to a list of editing tools. Recorded
+here as found: the matcher is
 `Edit|Write|MultiEdit`. An agent that edits through shell commands — `sed`, a
 heredoc, a script — matches none of them and bypasses accounting entirely, with
 no error and no prompt. The gate catches it eventually at PR time, which is
