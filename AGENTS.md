@@ -51,7 +51,7 @@ pawl/
 
 ## Commands
 
-Run from this directory. [`.envrc`](./.envrc) puts `./bin` on PATH, so once
+Run from this directory. [`.envrc.example`](./.envrc.example), copied to `.envrc` and allowed, puts `./bin` on PATH, so once
 you have built, `pawl` means this build.
 
 ```bash
@@ -168,7 +168,7 @@ to pawl:
   The TOML subset reader in `internal/policy/toml.go` exists precisely so that
   the module graph stays empty.
 - **`CGO_ENABLED=0` always.** cgo would link the host libc and break the static
-  binary property. `.envrc` sets it; the Makefile sets it; do not unset it.
+  binary property. `.envrc.example` sets it; the Makefile sets it; do not unset it.
 - **Tests run against real git repositories and real tool output formats. Never
   mock git, diff parsing, or evidence files** (C-9). Every defect found so far
   lived in the seam between git's behaviour and our model of it; a mock would

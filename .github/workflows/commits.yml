@@ -1,0 +1,88 @@
+# PAWL-027 AC1–AC4 — the commit history has to be machine-readable, because the
+# version is derived from it.
+name: commits
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  conventional:
+    name: conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      # Pinned exactly. PAWL-025 AC1 applies to pipeline dependencies as much as
+      # to actions, and the argument for an empty go.mod require block does not
+      # extend to CI.
+      - name: Install commitlint
+        run: npm install --no-save --no-audit --no-fund
+          @commitlint/cli@21.2.2 @commitlint/config-conventional@21.2.2
+
+      - name: Lint commits in this pull request
+        run: npx commitlint
+          --from "${{ github.event.pull_request.base.sha }}"
+          --to "${{ github.event.pull_request.head.sha }}"
+          --verbose
+
+  # AC4 — a commit touching a module that decides verdicts must say whether it
+  # moves them. commitlint cannot express a path-conditional rule, so this is
+  # separate.
+  verdict-declaration:
+    name: verdict declaration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Require a Verdict-Affecting declaration
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # The modules whose behaviour can change which changesets pass.
+          deciding='^internal/(policy|resolve|accounting|evidence)/'
+          missing=0
+
+          for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            if ! git show --name-only --format= "$sha" | grep -Eq "$deciding"; then
+              continue
+            fi
+            if git log -1 --format=%B "$sha" | grep -Eiq '^Verdict-Affecting:[[:space:]]*(yes|no)[[:space:]]*$'; then
+              continue
+            fi
+            echo "::error::$sha touches a module that decides verdicts but does not declare Verdict-Affecting"
+            git log -1 --format='  %h %s' "$sha"
+            missing=1
+          done
+
+          if [ "$missing" = 1 ]; then
+            cat <<'MSG'
+
+          A commit touching internal/policy, internal/resolve, internal/accounting
+          or internal/evidence must end with one of:
+
+            Verdict-Affecting: yes
+            Verdict-Affecting: no
+
+          "yes" forces a MAJOR bump (PAWL-013 AC2) regardless of the commit type,
+          because a client's contract with pawl is which changesets pass — a moved
+          threshold does not break their pipeline, it silently changes what merges.
+
+          Answering "no" is expected and normal. What is refused is silence: it is
+          not evidence that a change does not move verdicts (C-3).
+          MSG
+            exit 1
+          fi
+          echo "every commit touching a deciding module declares its effect"

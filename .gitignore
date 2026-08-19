@@ -17,3 +17,7 @@ dist/
 # Evidence generated during a local dogfood run
 junit.xml
 coverage.xml
+
+# direnv: per-developer, and `direnv allow` is a local trust decision.
+# Copy .envrc.example to .envrc and allow it.
+.envrc

@@ -109,6 +109,8 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-024-licensing-and-source-availability.md` | **built** · public source, proprietary licence · extends PAWL-013 |
 | `PAWL-025-security-posture.md` | **built** · pinning, scanning, fuzzing · extends PAWL-024 |
 | `PAWL-026-policy-input-validation.md` | **built** · rejects unusable thresholds · extends PAWL-006 |
+| `PAWL-027-contribution-and-release-flow.md` | **built** · conventional commits, rc tags, computed versions · extends PAWL-013 |
+| `PAWL-028-agent-skills.md` | **built** · `skills/` · extends PAWL-019 |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.

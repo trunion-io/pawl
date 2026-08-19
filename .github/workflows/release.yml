@@ -1,17 +1,28 @@
-# PAWL-013 — the release path.
+# PAWL-013 — the release path. PAWL-027 — how the version is arrived at.
 #
-# Every value in a published artifact derives from the tag and the tree. An
-# operator typing a version, uploading a binary by hand, or signing locally
-# would reintroduce exactly the gap AC6 closes.
+# Every value in a published artifact derives from the commit history and the
+# tree. An operator typing a version, uploading a binary by hand, or signing
+# locally would reintroduce exactly the gap PAWL-013 AC6 closes.
 name: release
 
+# PAWL-027 AC12 — the version is computed from the commits since the last
+# release, not chosen. PAWL-013 AC6 forbade an operator typing a version into the
+# build; a human deciding which tag to push is the same decision wearing a
+# different hat, and this removes it. Dispatch means "release now", never
+# "release this number".
+#
+# The tag is created here with GITHUB_TOKEN, whose pushes do not trigger further
+# workflow runs, so this cannot re-enter itself.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
-  contents: write   # create the release
+  contents: write   # create the tag and the release
   id-token: write   # cosign keyless (AC10)
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -19,25 +30,54 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0   # AC7 needs the history to check reachability
+          fetch-depth: 0   # AC7 needs the history, and AC12 needs the commits
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
-      # AC6: the version comes from the tag and nowhere else.
-      - name: Resolve version from the tag
-        id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      # AC7: a tag that is not on main, or a dirty tree, is not a release.
-      - name: Refuse a tag that is not on main
+      # AC7: a commit that is not on main, or a dirty tree, is not a release.
+      - name: Refuse anything that is not clean trunk
         run: |
           git fetch origin main --depth=0
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
-            || { echo "tag is not reachable from main; refusing to release"; exit 1; }
+            || { echo "not reachable from main; refusing to release"; exit 1; }
           [ -z "$(git status --porcelain)" ] \
             || { echo "working tree is not clean; refusing to release"; exit 1; }
+
+      # PAWL-027 AC12–AC16. The bump table lives in internal/release and is
+      # tested there, because its first row — a verdict-affecting change is
+      # MAJOR whatever its type — is the row every off-the-shelf release tool
+      # gets wrong, and getting it wrong ships a verdict change as a patch on
+      # every release rather than occasionally.
+      - name: Compute the version from commit history
+        id: v
+        run: go run ./internal/release/nextversion --notes-file release-notes.md
+
+      # AC10 of PAWL-027: no version-affecting commits means there is nothing to
+      # release. Failing here is deliberate — a dispatch that produces no release
+      # should be visible, not silently green.
+      - name: Nothing to release
+        if: steps.v.outputs.release != 'true'
+        run: |
+          echo "no version-affecting commits since ${{ steps.v.outputs.previous_tag }}"
+          echo "unconventional commits skipped: ${{ steps.v.outputs.unconventional }}"
+          exit 1
+
+      - name: Configure the tagger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # AC15 is enforced in the tool, which refuses to compute a version that
+      # already exists as a tag.
+      - name: Tag the release
+        run: |
+          set -euo pipefail
+          git tag -a "${{ steps.v.outputs.tag }}" \
+            -m "${{ steps.v.outputs.tag }}" \
+            -m "Bump: ${{ steps.v.outputs.bump }} from ${{ steps.v.outputs.previous }}"
+          git push origin "${{ steps.v.outputs.tag }}"
 
       - name: Check
         run: make check
@@ -70,7 +110,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes "Verify with cosign against this workflow's identity; see docs/install.md." \
+          gh release create "${{ steps.v.outputs.tag }}" \
+            --title "${{ steps.v.outputs.tag }}" \
+            --notes-file release-notes.md \
             dist/*

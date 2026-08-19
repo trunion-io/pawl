@@ -1,0 +1,92 @@
+# PAWL-027 AC8–AC11 — tag a release candidate when trunk is green.
+#
+# Candidates are not a staging environment. They exist so the release path runs
+# continuously instead of for the first time under pressure at a release. If
+# nobody ever installs one, it has still done its job.
+name: release candidate
+
+on:
+  workflow_run:
+    workflows: [check, security]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write   # create the tag
+
+concurrency:
+  group: rc-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      # This workflow fires once per finishing workflow, so the first to finish
+      # would tag a commit the other has not vouched for yet. AC8 says the full
+      # suite, so confirm every required check is green for this exact SHA.
+      - name: Require the full suite to be green
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          required="check govulncheck CodeQL fuzz parsers"
+          runs=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
+                   --jq '.check_runs[] | select(.conclusion=="success") | .name')
+          missing=""
+          while IFS= read -r name; do
+            printf '%s\n' "$runs" | grep -qxF "$name" || missing="$missing $name"
+          done <<'NAMES'
+          check
+          govulncheck
+          CodeQL
+          fuzz parsers
+          NAMES
+          if [ -n "$missing" ]; then
+            echo "not yet green:$missing — the other workflow is still running"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          go-version-file: go.mod
+
+      # AC10: no commit since the last release implies a change means no
+      # candidate. Tagging a docs-only commit would bury the real ones.
+      - name: Compute the candidate version
+        if: steps.gate.outputs.ready == 'true'
+        id: v
+        run: go run ./internal/release/nextversion --rc
+
+      - name: Tag the candidate
+        if: steps.gate.outputs.ready == 'true' && steps.v.outputs.release == 'true'
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists; nothing to do"
+            exit 0
+          fi
+          git tag -a "$TAG" "$SHA" -m "Release candidate $TAG
+
+          Bump: ${{ steps.v.outputs.bump }} from ${{ steps.v.outputs.previous }}
+          Commits since last release: ${{ steps.v.outputs.commits }}"
+          git push origin "$TAG"
+          echo "tagged $TAG"
+
+      - name: Report
+        if: steps.gate.outputs.ready == 'true' && steps.v.outputs.release != 'true'
+        run: echo "no version-affecting commits since ${{ steps.v.outputs.previous_tag }}; no candidate"

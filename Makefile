@@ -107,3 +107,9 @@ fuzz: ## PAWL-025 AC8 — exercise the parsers that read input we did not produc
 	go test -run=XXX -fuzz=FuzzCoverage   -fuzztime=$(FUZZTIME) ./internal/evidence
 	go test -run=XXX -fuzz=FuzzTypecheck  -fuzztime=$(FUZZTIME) ./internal/evidence
 	go test -run=XXX -fuzz=FuzzRecord     -fuzztime=$(FUZZTIME) ./internal/claimlog
+
+hooks: ## Point git at .githooks (PAWL-027) — one command per clone
+	@git config core.hooksPath .githooks
+	@echo "core.hooksPath = .githooks"
+	@echo "commit-msg validates the message; pre-push runs make check."
+	@echo "Both are bypassable with --no-verify; CI is the enforcement."

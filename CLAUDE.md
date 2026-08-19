@@ -19,7 +19,7 @@ cd pawl && make check
 after any change. If they don't pass on a clean checkout, fix that before
 anything else — do not work around it.
 
-[`.envrc`](./.envrc) puts `./bin` on `PATH`, so after `make build` the `pawl` you
+[`.envrc.example`](./.envrc.example), copied to `.envrc`, puts `./bin` on `PATH`, so after `make build` the `pawl` you
 invoke is your local build. It stops meaning anything when you leave the
 directory.
 

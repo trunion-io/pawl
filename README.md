@@ -164,9 +164,11 @@ make fuzz        # the parsers that read input pawl did not write
 make dist        # cross-compile, checksum, verify each artifact's version
 ```
 
-[`.envrc`](./.envrc) (direnv) puts `./bin` on `PATH` and pins `CGO_ENABLED=0`, so
-`pawl` means your local build while you are in this directory and nothing once
-you leave.
+[`.envrc.example`](./.envrc.example) (direnv) puts `./bin` on `PATH` and pins
+`CGO_ENABLED=0`, so `pawl` means your local build while you are in this
+directory and nothing once you leave. Copy it to `.envrc` and run `direnv
+allow`; the copy is gitignored, because allowing an `.envrc` is a trust
+decision each developer makes locally rather than one inherited from a clone.
 
 ## Security
 
