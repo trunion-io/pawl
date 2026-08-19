@@ -99,7 +99,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-015-decision-capture.md` | drafted, not built · took AC3 from PAWL-008 |
 | `PAWL-016-edit-time-accounting-hook.md` | **built** — `pawl pending` + Claude Code hook · implements PAWL-008 AC1 |
 | `PAWL-017-deterministic-accounting.md` | **drafted, not built — next** · makes accounting cheap enough to keep |
-| `PAWL-018-record-storage.md` | drafted, not built · extends PAWL-001 · **granularity provisional** |
+| `PAWL-018-record-storage.md` | **built** · extends PAWL-001 · **granularity provisional** |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.

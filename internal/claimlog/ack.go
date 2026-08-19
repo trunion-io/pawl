@@ -1,11 +1,9 @@
 package claimlog
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"trunion.io/pawl/internal/model"
@@ -24,46 +22,22 @@ func AckPath(repo string) string {
 }
 
 func AppendAck(repo string, ack model.Acknowledgement) (model.Acknowledgement, error) {
-	p := AckPath(repo)
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return ack, err
-	}
-	line, err := json.Marshal(ack)
-	if err != nil {
-		return ack, err
-	}
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
-	if err != nil {
-		return ack, err
-	}
-	defer f.Close()
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		return ack, err
-	}
-	return ack, nil
+	return ack, writeRecord(acksDir(repo), ack.ID, ack)
 }
 
 func LoadAcks(repo string) ([]model.Acknowledgement, error) {
-	b, err := os.ReadFile(AckPath(repo))
+	acks, err := readRecords[model.Acknowledgement](acksDir(repo))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
-
-	var acks []model.Acknowledgement
-	for i, raw := range strings.Split(string(b), "\n") {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
-		}
-		var a model.Acknowledgement
-		if err := json.Unmarshal([]byte(raw), &a); err != nil {
-			return nil, fmt.Errorf("%s:%d: malformed acknowledgement: %w", AckPath(repo), i+1, err)
-		}
-		acks = append(acks, a)
+	legacy, err := readLegacyJSONL[model.Acknowledgement](AckPath(repo))
+	if err != nil {
+		return nil, err
 	}
+	acks = append(acks, legacy...)
+	sortRecords(acks, func(a model.Acknowledgement) (string, string) {
+		return a.TS.Format(time.RFC3339Nano), a.ID
+	})
 	return acks, nil
 }
 

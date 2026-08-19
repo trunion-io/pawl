@@ -12,11 +12,9 @@ package claimlog
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"trunion.io/pawl/internal/model"
@@ -31,52 +29,34 @@ func LogPath(repo string) string {
 	return filepath.Join(repo, ClaimDir, ClaimFile)
 }
 
+// Append writes a claim to its own file (PAWL-018). The name is historical —
+// the log is still append-only, it just no longer appends to a shared file that
+// every branch collides on.
 func Append(repo string, claim model.Claim) (model.Claim, error) {
-	p := LogPath(repo)
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return claim, err
-	}
-	line, err := json.Marshal(claim)
-	if err != nil {
-		return claim, err
-	}
-	// O_APPEND write so concurrent pod members do not interleave partial lines.
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
-	if err != nil {
-		return claim, err
-	}
-	defer f.Close()
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		return claim, err
-	}
-	return claim, nil
+	return claim, writeRecord(claimsDir(repo), claim.ID, claim)
 }
 
+// Load reads every claim: per-record files, plus the legacy shared log where a
+// repository still has one (AC6).
 func Load(repo string) ([]model.Claim, error) {
-	p := LogPath(repo)
-	b, err := os.ReadFile(p)
+	claims, err := readRecords[model.Claim](claimsDir(repo))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
-
-	var claims []model.Claim
-	for i, raw := range strings.Split(string(b), "\n") {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
-		}
-		var c model.Claim
-		if err := json.Unmarshal([]byte(raw), &c); err != nil {
-			return nil, fmt.Errorf("%s:%d: malformed claim: %w", p, i+1, err)
-		}
-		if c.VerifiedBy == nil {
-			c.VerifiedBy = []model.EvidenceRef{}
-		}
-		claims = append(claims, c)
+	legacy, err := readLegacyJSONL[model.Claim](LogPath(repo))
+	if err != nil {
+		return nil, err
 	}
+	claims = append(claims, legacy...)
+
+	for i := range claims {
+		if claims[i].VerifiedBy == nil {
+			claims[i].VerifiedBy = []model.EvidenceRef{}
+		}
+	}
+	sortRecords(claims, func(c model.Claim) (string, string) {
+		return c.TS.Format(time.RFC3339Nano), c.ID
+	})
 	return claims, nil
 }
 

@@ -46,6 +46,7 @@ Commands:
   claim    Record a claim against a span of source. Called from a harness hook.
   ack      Account for a changed span that carries nothing to assume.
   pending  List changed spans in the working tree that carry no record yet.
+  prune    Remove record files for a changeset that has been attested.
   verify   Resolve claims against evidence and print the reading list.
   attest   Emit the in-toto Statement. Sign it with ` + "`cosign attest-blob`" + `.
   gate     Evaluate the policy pack. Exit 1 on violation.
@@ -102,6 +103,8 @@ func Run(args []string, version string) int {
 		return cmdAck(args[1:])
 	case "pending":
 		return cmdPending(args[1:])
+	case "prune":
+		return cmdPrune(args[1:])
 	case "verify":
 		return cmdVerify(args[1:])
 	case "attest":
@@ -367,6 +370,78 @@ func cmdPending(args []string) int {
 func pendingSoftFail(err error, quiet bool) int {
 	if !quiet {
 		fmt.Fprintln(os.Stderr, "pawl pending:", err)
+	}
+	return 0
+}
+
+// cmdPrune removes the record files named by an attestation (PAWL-018 AC7).
+//
+// Records are working state for an unmerged changeset; the signed attestation
+// embeds every one of them and git history keeps them regardless. Pruning only
+// what a trail provably names is what makes this safe — it will never remove a
+// record that is not already preserved somewhere durable.
+func cmdPrune(args []string) int {
+	fs := flag.NewFlagSet("prune", flag.ContinueOnError)
+	var (
+		repo     = fs.String("repo", ".", "Repository root.")
+		attested = fs.String("attested", "", "Attestation whose records to remove. Required.")
+		dryRun   = fs.Bool("dry-run", false, "Report what would be removed, remove nothing.")
+	)
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "usage: pawl prune --attested <trail.intoto.json> [--repo .] [--dry-run]")
+		fmt.Fprintln(fs.Output(), "\nRemoves record files the given attestation already embeds.")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *attested == "" {
+		fs.Usage()
+		return 2
+	}
+
+	b, err := os.ReadFile(*attested)
+	if err != nil {
+		return fail(err)
+	}
+	var stmt struct {
+		Predicate struct {
+			Claims []struct {
+				ID string `json:"id"`
+			} `json:"claims"`
+		} `json:"predicate"`
+	}
+	if err := json.Unmarshal(b, &stmt); err != nil {
+		return fail(fmt.Errorf("%s: not a readable attestation: %w", *attested, err))
+	}
+	if len(stmt.Predicate.Claims) == 0 {
+		fmt.Println("attestation names no records; nothing to prune")
+		return 0
+	}
+
+	ids := make([]string, 0, len(stmt.Predicate.Claims))
+	for _, c := range stmt.Predicate.Claims {
+		ids = append(ids, c.ID)
+	}
+
+	if *dryRun {
+		fmt.Printf("would remove %d record(s) named by %s\n", len(ids), *attested)
+		for _, id := range ids {
+			fmt.Printf("  %s\n", id)
+		}
+		return 0
+	}
+
+	removed, skipped, err := claimlog.Prune(*repo, ids)
+	if err != nil {
+		return fail(err)
+	}
+	fmt.Printf("removed %d record(s)\n", removed)
+	if len(skipped) > 0 {
+		// Legacy JSONL entries land here: removing one line would rewrite a
+		// shared append-only file, which is the edit write-once storage exists
+		// to prevent.
+		fmt.Printf("%d not present as record files (legacy log entries are left alone)\n", len(skipped))
 	}
 	return 0
 }

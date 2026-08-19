@@ -655,8 +655,152 @@ func TestAcknowledgementsAreStoredApartFromClaims(t *testing.T) {
 	if len(claims) != 0 {
 		t.Errorf("acknowledgement appeared in the claim log: %d claims", len(claims))
 	}
-	if _, err := os.Stat(claimlog.AckPath(repo)); err != nil {
-		t.Errorf("acknowledgement log not written: %v", err)
+	// Stored apart from claims. PAWL-018 moved this from a sibling file to a
+	// sibling directory; PAWL-008 AC2's requirement — that nothing reading
+	// claims can encounter an acknowledgement — is unchanged and still what is
+	// being asserted.
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(acks) != 1 {
+		t.Errorf("acknowledgement not stored: got %d", len(acks))
+	}
+}
+
+// TestRecordsOnTwoBranchesMergeWithoutConflict is PAWL-018 AC3, and the reason
+// the spec exists.
+//
+// The previous shared-JSONL layout conflicted here on the second merge, because
+// every branch appended at the same end of the same file. Against real git, per
+// C-9 — a mock would have hidden the exact behaviour under test.
+func TestRecordsOnTwoBranchesMergeWithoutConflict(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	// Branch A records a claim.
+	git(t, repo, "checkout", "-q", "-b", "feature-a")
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "branch A assumption",
+		Path: "src/auth.py", StartLine: 4, EndLine: 6,
+	})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "A")
+
+	// Branch B, from the same base, records its own.
+	git(t, repo, "checkout", "-q", "main")
+	git(t, repo, "checkout", "-q", "-b", "feature-b")
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "branch B assumption",
+		Path: "src/auth.py", StartLine: 8, EndLine: 9,
+	})
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 1, EndLine: 2})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "B")
+
+	// Merge both, in sequence — the merge-queue case.
+	git(t, repo, "checkout", "-q", "main")
+	git(t, repo, "merge", "-q", "feature-a")
+
+	cmd := exec.Command("git", "merge", "--no-edit", "feature-b")
+	cmd.Dir = repo
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("second merge conflicted, which is the whole failure this "+
+			"layout exists to prevent:\n%s", out)
+	}
+
+	// And every record from both branches survived.
+	claims := loadClaims(t, repo)
+	texts := map[string]bool{}
+	for _, c := range claims {
+		texts[c.Text] = true
+	}
+	if !texts["branch A assumption"] || !texts["branch B assumption"] {
+		t.Errorf("merge lost records: got %d claims, %v", len(claims), texts)
+	}
+	acks, err := claimlog.LoadAcks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(acks) != 1 {
+		t.Errorf("acknowledgement lost in merge: got %d", len(acks))
+	}
+}
+
+// TestLegacyJSONLIsStillRead covers AC6. A repository mid-adoption has records
+// in the old shared log, and losing evidence is the one thing this component
+// may never do.
+func TestLegacyJSONLIsStillRead(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+
+	// A record in the new per-file layout.
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "new layout",
+		Path: "src/auth.py", StartLine: 4, EndLine: 6,
+	})
+	// And one left behind in the legacy shared log.
+	legacy := `{"schema_version":"0.1","id":"legacy01","ts":"2026-01-01T00:00:00Z",` +
+		`"kind":"assumption","text":"old layout","path":"src/auth.py",` +
+		`"start_line":8,"end_line":9,"fingerprint":"sha256:x","verified_by":[],` +
+		`"author":{"role":"agent"}}` + "\n"
+	mustWrite(t, claimlog.LogPath(repo), legacy)
+
+	claims := loadClaims(t, repo)
+	seen := map[string]bool{}
+	for _, c := range claims {
+		seen[c.Text] = true
+	}
+	if !seen["new layout"] || !seen["old layout"] {
+		t.Errorf("expected records from both layouts, got %v", seen)
+	}
+}
+
+// TestRecordFilesAreWriteOnce covers AC4. Append-only was the property worth
+// keeping; write-once holds it more strongly because there is no edit path.
+func TestRecordFilesAreWriteOnce(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	c := record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "first",
+		Path: "src/auth.py", StartLine: 4, EndLine: 6,
+	})
+
+	// Re-writing the same id must be refused rather than silently overwriting.
+	if _, err := claimlog.Append(repo, c); err == nil {
+		t.Error("re-writing an existing record must fail; records are never modified")
+	}
+}
+
+// TestPruneRemovesAttestedRecords covers AC7.
+func TestPruneRemovesAttestedRecords(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	keep := record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "keep",
+		Path: "src/auth.py", StartLine: 4, EndLine: 6,
+	})
+	drop := record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "drop",
+		Path: "src/auth.py", StartLine: 8, EndLine: 9,
+	})
+
+	removed, skipped, err := claimlog.Prune(repo, []string{drop.ID, "nosuchid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 1 {
+		t.Errorf("removed = %d, want 1", removed)
+	}
+	if len(skipped) != 1 || skipped[0] != "nosuchid" {
+		t.Errorf("skipped = %v, want [nosuchid]", skipped)
+	}
+
+	claims := loadClaims(t, repo)
+	if len(claims) != 1 || claims[0].ID != keep.ID {
+		t.Errorf("prune removed the wrong record: %d left", len(claims))
 	}
 }
 

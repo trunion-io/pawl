@@ -10,6 +10,7 @@
 | `pawl verify` | CI | Resolves claims against evidence, prints the reading list |
 | `pawl attest` | CI | Emits the in-toto Statement for signing |
 | `pawl gate` | CI | Evaluates the policy pack, exits 1 on violation |
+| `pawl prune` | After a merge | Removes record files an attestation already embeds |
 | `pawl version` | Anywhere | Prints version and platform |
 
 `pawl <command> -h` lists the flags for any command.
@@ -143,6 +144,60 @@ reconstruction from a finished diff. That distinction is C-2.
 
 To enable it in a checkout, open `/hooks` once or restart Claude Code — the
 settings watcher only picks up `.claude/` if it existed when the session began.
+
+## Where records are stored
+
+| Path | What |
+|---|---|
+| `.pawl/claims/<id>.json` | One file per claim |
+| `.pawl/acks/<id>.json` | One file per acknowledgement |
+| `.pawl/.cache/` | Machine-local working state. **Ignore this in git** |
+
+**One file per record, deliberately.** The earlier layout used two shared
+append-only files, and two branches each recording a claim conflicted on merge —
+every second merge, and in a merge queue every PR against every other. Record
+ids are unique, so per-record files mean git never has to merge anything.
+
+**Commit `.pawl/claims/` and `.pawl/acks/`.** CI reads them from your checkout;
+a repository that ignores them has CI find no records and mark every changed
+line unclaimed. They are already excluded from the changed-line count, so
+committing them does not affect your ratio.
+
+**Ignore `.pawl/.cache/`.** It is per-clone working state and never influences a
+verdict — deleting it changes nothing except what you are told and when.
+
+Record files are **written once and never modified**. Re-recording an existing
+id is refused rather than overwriting: an amended record is not evidence of
+anything.
+
+If you still have `.pawl/claims.jsonl` from an earlier version, it is read
+alongside the new layout and left alone. There is no migration to run.
+
+## `pawl prune`
+
+```bash
+pawl prune --attested trail.intoto.json [--repo .] [--dry-run]
+```
+
+Removes the record files that an attestation already embeds.
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--attested` | required | The attestation whose records to remove |
+| `--repo` | `.` | Repository root |
+| `--dry-run` | off | Report what would be removed, remove nothing |
+
+Records are working state for an unmerged changeset, not a permanent archive.
+The signed attestation contains every one of them and git history keeps them
+regardless, so pruning after a merge keeps `.pawl/` holding only in-flight work.
+
+Pruning only what a trail provably names is what makes it safe — it will never
+remove a record that is not already preserved somewhere durable. Legacy
+`claims.jsonl` entries are skipped, because removing one line would rewrite a
+shared append-only file.
+
+Running it at all is your choice; some teams will want the working records kept
+in the tree.
 
 ## Claim kinds
 
