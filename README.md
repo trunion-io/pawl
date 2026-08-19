@@ -159,7 +159,7 @@ binding.
 
 ```bash
 make help      # list targets
-make check     # fmt + vet + 64 e2e tests against real git repositories
+make check     # fmt + vet + 72 e2e tests against real git repositories
 ```
 
 [`.envrc`](./.envrc) (direnv) puts `./bin` on `PATH` and pins `CGO_ENABLED=0`, so

@@ -265,3 +265,44 @@ func commandsFromHelp(t *testing.T, repo string) []string {
 	}
 	return out
 }
+
+// TestBlockedGateStillProducesEvidence — PAWL-006 AC6 (via PAWL-022 AC6).
+//
+// "…exit non-zero on violation and shall emit the attestation regardless, so a
+// blocked changeset still produces evidence."
+//
+// A blocked changeset that produced no trail would leave the reviewer with the
+// verdict and none of the reasoning behind it, which is the opposite of the
+// point. Run through the CLI because the exit status is half the criterion.
+func TestBlockedGateStillProducesEvidence(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	run(t, repo, "claim", "cites a test that does not exist",
+		"--path", "src/auth.py", "--lines", "1-9",
+		"--verified-by", "test:tests.test_auth.test_imaginary")
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+	writeJUnit(t, repo)
+
+	// The attestation is produced even though this changeset will not pass.
+	att := run(t, repo, "attest", "--base", "HEAD~1", "--junit", "junit.xml",
+		"--out", "trail.json")
+	if att.code != 0 {
+		t.Fatalf("attest on a failing changeset: exit %d\n%s%s", att.code, att.stdout, att.stderr)
+	}
+	body, err := os.ReadFile(filepath.Join(repo, "trail.json"))
+	if err != nil {
+		t.Fatalf("no trail written for a blocked changeset: %v", err)
+	}
+	for _, want := range []string{"assumption-trail", "cites a test that does not exist", "needs_human"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("the trail is missing %q — the reasoning must survive a block", want)
+		}
+	}
+
+	// And the gate refuses it.
+	g := run(t, repo, "gate", "--base", "HEAD~1", "--junit", "junit.xml")
+	if g.code != 1 {
+		t.Errorf("gate exit = %d, want 1 on violation", g.code)
+	}
+}

@@ -15,7 +15,7 @@ holds only what is specific to working in pawl.
 cd pawl && make check
 ```
 
-`make check` is fmt + vet + the e2e suite: 64 tests, all must pass before and
+`make check` is fmt + vet + the e2e suite: 72 tests, all must pass before and
 after any change. If they don't pass on a clean checkout, fix that before
 anything else — do not work around it.
 
@@ -40,16 +40,25 @@ fallback if it turns out unreliable.
 
 Other unblocked work, in rough order of value:
 
-1. Close the untested criteria flagged `checkable: partially` in
-   [`./_spec/PAWL-004-reading-list.md`](./_spec/PAWL-004-reading-list.md)
-   AC4 and AC5 — the claim-log exclusion and the non-semantic-line filter were
-   both found in a live demo rather than by the suite, which is the wrong way
-   round.
-2. [`./_spec/PAWL-006-policy-gate.md`](./_spec/PAWL-006-policy-gate.md)
-   AC1, AC3, AC5 — policy file loading, must-read ratio and sensitive paths are
-   implemented but untested.
-3. [`./_spec/PAWL-003-coverage-resolution.md`](./_spec/PAWL-003-coverage-resolution.md)
-   AC3 — skipped-test handling has no dedicated test.
+1. **PAWL-014, escalation precision.** Reporting a false-clear rate without it
+   is half a measurement — a tool that escalates everything scores perfectly and
+   is worthless. PAWL-007's AC5 already requires the two be reported together.
+2. **PAWL-012, configuration.** `.pawl/config.json` and `PAWL_*`, so the same
+   six flags are not repeated at every call site.
+3. **PAWL-013, the release workflow.** Blocked on the supported-versions
+   decision above.
+4. **PAWL-015, decision capture.** May not be solvable; the spec says so and
+   specifies the measurement that would tell us.
+
+All eight `checkable: partially` criteria in the delivered specs now have checks
+behind them, recorded in
+[`PAWL-022`](./_spec/PAWL-022-closing-partial-criteria.md). **The delivered
+specs still say `partially`** — they are immutable, so the checks are recorded
+by reference rather than edited in place. Grep will mislead you; read PAWL-022.
+
+If you write a new `checkable: partially`, close it in the same changeset. That
+field is where a criterion goes to be forgotten: two of these were found in a
+live demo rather than by the suite.
 
 ## Accounting for what you change
 

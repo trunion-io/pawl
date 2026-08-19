@@ -104,6 +104,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-020-turn-boundary-accounting.md` | **built** · turn-boundary binding · **AC1 needs live verification** |
 
 | `PAWL-021-cli-coverage.md` | **built** · subprocess tests for the CLI seam |
+| `PAWL-022-closing-partial-criteria.md` | **built** · extends PAWL-003, PAWL-004, PAWL-006 |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.
