@@ -154,6 +154,13 @@ produces noise. Now cheaper to decide either way: `pawl claim` starts in ~2.5ms,
 so enforced claiming no longer carries a per-edit latency cost worth arguing
 about.
 
+**PAWL-013 supported versions and backports.** Trunk-based development says fix
+forward, but PAWL-013 AC2 makes any verdict-affecting change a MAJOR bump — so
+telling a pinned client to upgrade for a security fix also tells them to accept
+a change in which changesets pass. Either only the latest version is supported,
+or there are maintenance branches and AC13 gives way. **A client's security team
+will ask this during procurement**, so it cannot wait past a first engagement.
+
 ## Conventions
 
 Repo-wide conventions are in [the repository AGENTS.md](../AGENTS.md). Specific

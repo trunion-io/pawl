@@ -94,6 +94,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-010-documentation.md` | drafted · **written after the docs it specifies** |
 | `PAWL-011-tool-provenance.md` | drafted, not built · extends PAWL-005 |
 | `PAWL-012-configuration.md` | drafted, not built · extends PAWL-006 |
+| `PAWL-013-versioning-and-release.md` | drafted, not built · **open decision: supported versions** |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.
