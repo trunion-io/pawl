@@ -98,6 +98,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-014-escalation-precision.md` | drafted, not built · mirrors PAWL-007 |
 | `PAWL-015-decision-capture.md` | drafted, not built · took AC3 from PAWL-008 |
 | `PAWL-016-edit-time-accounting-hook.md` | **built** — `pawl pending` + Claude Code hook · implements PAWL-008 AC1 |
+| `PAWL-017-deterministic-accounting.md` | **drafted, not built — next** · makes accounting cheap enough to keep |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.

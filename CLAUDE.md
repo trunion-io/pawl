@@ -30,11 +30,15 @@ taxonomy that was blocking it is **settled** — two axes, binary verdict per sp
 plus a cause per (span, claim) pair — so it is ready to build. It is the largest
 item on this list and the only one on the critical path to the demo.
 
-PAWL-008's CLI half is built. The next thing to build is
-[`PAWL-016`](./_spec/PAWL-016-edit-time-accounting-hook.md) — `pawl pending` plus
-a Claude Code hook — because **PAWL-007 has almost nothing to sample until a
-corpus exists**: this repo clears 6.9% of its own changed lines and 79% carry no
-record at all. Claims at volume come first, then sampling means something.
+PAWL-016 is built: `pawl pending` and the Claude Code hook. The next thing to
+build is [`PAWL-017`](./_spec/PAWL-017-deterministic-accounting.md), and it
+should land **before the hook is switched on for real work**. As built, the hook
+costs ~159 tokens per edit with 127 of that repeated boilerplate, and most
+acknowledgements are mechanically determinable — paying the unoptimised cost
+forty times a session to learn something we can predict is the wrong trade.
+
+After that, PAWL-007. It has almost nothing to sample until a corpus exists:
+this repo clears 6.9% of its own changed lines and 79% carry no record at all.
 
 Other unblocked work, in rough order of value:
 
