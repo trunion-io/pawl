@@ -189,12 +189,11 @@ to pawl:
 - **Escalation precision is not built** (PAWL-014). Reporting a false-clear rate
   without it is reporting half a measurement: a tool that escalates everything
   scores perfectly and is worthless.
-- **Claiming is still prompted at edit time.** PAWL-008's CLI half is built —
-  `pawl ack`, the acknowledgement record, the gate distinction and the ratio —
-  but AC1's hook is not, so nothing yet *requires* an agent to account for a
-  span. Until it does, the ~85% unclaimed rate measured on this repo stands, and
-  `max_unclaimed_lines = 0` keeps pressuring agents to backfill against a
-  finished diff, which is the failure C-2 forbids.
+- **Nothing is installed, so nothing is enforced yet.** `pawl setup claude`
+  installs both bindings but has not been run on any machine, so the ~85%
+  unclaimed rate measured on this repo still stands and `max_unclaimed_lines = 0`
+  keeps pressuring agents to backfill against a finished diff.
+
 - **The turn-boundary binding is built but unverified in a live session.** PAWL-020
   closes the shell-edit gap by binding to the end of a turn rather than to a list
   of editing tools, and every criterion is tested — but whether the harness's
