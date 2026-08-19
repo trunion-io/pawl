@@ -57,6 +57,51 @@ func assetName(version string) string {
 }
 
 // Verify checks the running binary against the checksums published for its
+// isReleaseVersion reports whether a version string names something that could
+// have been published (PAWL-023 AC3).
+//
+// The test is what a release version *is* — SemVer, because PAWL-013 AC1 tags
+// releases vMAJOR.MINOR.PATCH — rather than a list of the development spellings
+// seen so far. That list was the bug: it held "", "dev" and "-dirty", and missed
+// the spelling this repository actually produces, because `git describe --tags
+// --always` falls back to a bare commit SHA when no tag is reachable. Every
+// local build therefore asked GitHub for a release named after a commit, got a
+// 404, and reported the checksum as UNCHECKED.
+//
+// UNCHECKED was the honest status for what happened, which is why nothing looked
+// broken. It was still the wrong answer: AC3 requires a development build to
+// report as unverifiable, and a status that appears on every developer's machine
+// on every build is the noise PAWL-025 warns trains people to ignore the output.
+//
+// Enumerating release shapes cannot go stale in the same way. A new development
+// spelling is inert here by default, where under the old test it would have
+// silently become a network lookup.
+func isReleaseVersion(v string) bool {
+	v = strings.TrimPrefix(v, "v")
+	if v == "" || strings.Contains(v, "-dirty") {
+		return false
+	}
+	// Strip any prerelease or build metadata; the core must be MAJOR.MINOR.PATCH.
+	if i := strings.IndexAny(v, "-+"); i >= 0 {
+		v = v[:i]
+	}
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for _, c := range part {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // version (AC1–AC3).
 func Verify(version string) Result {
 	r := Result{Version: version}
@@ -70,7 +115,7 @@ func Verify(version string) Result {
 	}
 	r.Path = exe
 
-	if version == "" || version == "dev" || strings.Contains(version, "-dirty") {
+	if !isReleaseVersion(version) {
 		r.Status = Unverifiable
 		r.Detail = "a development build has no published checksum"
 		return r
