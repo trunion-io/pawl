@@ -59,48 +59,12 @@ make check          # fmt + vet + the e2e suite
 Requires a Go toolchain. Nothing else: `go.mod` has no `require` block, so there
 is no module download and no lockfile to review.
 
-### Released binaries — not yet published
+### Released binaries
 
-The table below is the intended distribution. It is designed and the build side
-is wired (`make dist`), but nothing is published yet — until the first tagged
-release, build from source.
-
-| Your stack | Install |
-|---|---|
-| Anything | Download from GitHub Releases, check against `SHA256SUMS`, drop on `PATH` |
-| macOS | `brew install trunion/tap/pawl` |
-| TypeScript | `npx @trunion/pawl` — per-platform packages via `optionalDependencies`, no postinstall script |
-| Python | `uv tool install trunion-pawl` — per-platform wheels wrapping the binary |
-| CI, containerised | `ghcr.io/trunion/pawl:<version>` — `scratch` image, ~5MB |
-
-The binary is the artifact in every row. The package managers are only delivery
-channels, so a client installs pawl the way they already install everything
-else; none of them need to know or care what it is written in.
-
-`make dist` produces the full matrix plus `SHA256SUMS`:
-
-```bash
-make dist VERSION=0.1.0
-```
-
-### Verifying what you got
-
-Release binaries will be signed with **cosign keyless** off the CI OIDC token —
-the same tool and the same flow pawl tells you to use for `pawl attest`, so
-verifying pawl itself uses the muscle you are building anyway.
-
-```bash
-cosign verify-blob \
-  --certificate-identity-regexp 'https://github.com/trunion/pawl/.*' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --bundle pawl-0.1.0-linux-amd64.sigstore.json \
-  pawl-0.1.0-linux-amd64
-```
-
-**In CI, pin by digest, not by tag.** pawl gates merges, so the version that runs
-decides whether a PR passes. Any change to gate behaviour is a major version
-bump; treat an unpinned pawl the way you would treat an unpinned linter that can
-block a release.
+Not yet published. Once tagged, pawl installs via GitHub Releases, Homebrew,
+`npx`, `uv tool install`, or a ~5MB `scratch` container image — the binary is the
+artifact in every case. Full matrix, signature verification and CI pinning:
+**[docs/install.md](./docs/install.md)**.
 
 ## Use
 
@@ -138,34 +102,21 @@ READING LIST
 pawl reads **language-neutral** CI artifacts — junit XML, Cobertura coverage, git
 plumbing. It does not care what your repo is written in.
 
-## Claim kinds
+## Documentation
 
-| kind | meaning | escalates? |
-|---|---|---|
-| `assumption` | taken as true without proof at the point of writing | if unverified |
-| `rejected_alternative` | a path considered and not taken | if unverified |
-| `undetermined` | could not establish it, proceeded anyway | **always** |
-| `constraint` | a requirement traced to a spec criterion | if unverified |
+Operator documentation lives in **[docs/](./docs/)**:
 
-## Evidence types
+| Page | For |
+|---|---|
+| [Install](./docs/install.md) | Getting the binary, verifying it, pinning it in CI |
+| [Configuration](./docs/configuration.md) | Policy thresholds and where pawl reads from |
+| [CI integration](./docs/ci.md) | Worked GitHub Actions, GitLab and Jenkins jobs |
+| [Reference](./docs/reference.md) | Commands, flags, claim kinds, evidence types, exit codes |
+| [Attestation](./docs/attestation.md) | What is in the predicate, and how to verify a trail |
 
-`test` (junit node id) · `coverage` (line hits) · `typecheck` (file clean) ·
-`policy` (named OPA rule) · `spec` (checkable acceptance criterion)
-
-Only criteria marked *checkable* in a signed spec count. An acceptance criterion
-that cannot become a mechanical check is a permanent tax on human attention, and
-surfacing that during spec review is the point.
-
-## Attestation
-
-`pawl attest` emits an in-toto Statement whose **subject is the git tree**,
-not a built artifact. SLSA v1.2 promoted the Source track to approved and
-deliberately leaves source provenance attestations undefined, up to whoever
-implements them; this predicate occupies that slot. Binding to an image digest
-would be the wrong anchor — in agentic delivery the changeset is the deliverable
-and the build is downstream of it.
-
-Signing is `cosign attest-blob` with a CI OIDC token. Keyless, no custody.
+Design rationale is deliberately elsewhere — [AGENTS.md](./AGENTS.md) and
+[`_spec/`](./_spec) are for people building pawl, `docs/` is for people running
+it.
 
 ## Deliberately not here
 

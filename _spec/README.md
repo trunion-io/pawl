@@ -15,6 +15,42 @@ source — never compiled in, never shipped in the binary — and keeps it out o
 globs aimed at source trees. See
 [the repository AGENTS.md](../../AGENTS.md#adding-a-product).
 
+## Process — two rules, not negotiable
+
+**1. Spec first. Always.**
+
+Nothing lands without a spec that precedes it. Not code, not documentation, not
+a schema change, not a build change. If you are about to write something and
+there is no criterion it answers to, you are writing the spec — stop and write
+it properly.
+
+"This isn't behaviour, so it doesn't need a spec" is not an exemption, it is the
+excuse that produced every unsigned reconstructed spec in this directory. The
+test is not *is it code*, it is *could this be wrong in a way somebody would
+have to catch by reading it*. Documentation fails that test constantly.
+
+**2. Delivered specs are immutable.**
+
+A spec marked `delivered` is never amended, never edited, never "clarified". Its
+criteria are the contract that the delivered code was accepted against, and
+rewriting them retroactively changes what was agreed after the fact — which is
+the same failure as a claim edited to match the final code.
+
+To change or extend delivered behaviour, **write a new spec that references the
+delivered one**:
+
+```markdown
+**Extends:** PAWL-005 (delivered, immutable)
+```
+
+State plainly which criteria of the referenced spec still hold, which the new
+work supersedes, and which it leaves alone. The pair is then the contract.
+
+The only permitted edit to a delivered spec is repointing a `checkable:`
+reference when a check moves — a rename or a port. The criterion's *text* must
+not change. If you find yourself rewording a criterion during mechanical work,
+that is a decision and needs a new spec.
+
 ## Format
 
 Each spec is one file per unit of work, named `<KEY>-<slug>.md`, where the key is
@@ -54,7 +90,18 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-006-policy-gate.md` | delivered |
 | `PAWL-007-calibration-sampler.md` | **drafted, not built — next** |
 | `PAWL-008-harness-hooks.md` | drafted, not built |
+| `PAWL-009-spec-tool.md` | drafted, not built |
+| `PAWL-010-documentation.md` | drafted · **written after the docs it specifies** |
+| `PAWL-011-tool-provenance.md` | drafted, not built · extends PAWL-005 |
+| `PAWL-012-configuration.md` | drafted, not built · extends PAWL-006 |
 
-Signatures are absent throughout: these were written after the code, which is the
-wrong order and is itself the argument for the spec tool. Treat them as
-reconstructed intent, not as agreed contracts.
+Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
+code, which is the wrong order and is itself the argument for the spec tool.
+Treat them as reconstructed intent, not as agreed contracts.
+
+PAWL-010 is the same failure, committed knowingly and recently: the `docs/` tree
+was written before the spec that describes it, on the reasoning that
+documentation is not behaviour. It is recorded here rather than tidied away,
+because a repository that cannot admit its own process failures has no business
+selling a tool that catches them. PAWL-011 and PAWL-012 were written first, as
+everything from here on must be.

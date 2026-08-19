@@ -53,6 +53,16 @@ Unblocked work, in rough order of value:
 
 ## Working style in this product
 
+- **Spec first. Always.** Nothing lands without a criterion it answers to — not
+  code, not documentation, not a schema or build change. "This isn't behaviour"
+  is not an exemption; for a CLI tool the documentation is an **output**, the
+  same as the binary, and `--help` drifting from `docs/` is a defect in the
+  delivered product. See [`_spec/README.md`](./_spec/README.md).
+- **Delivered specs are immutable.** Never amend one. Write a new spec that
+  declares `**Extends:** PAWL-00N (delivered, immutable)` and states which of
+  its criteria still hold. The only permitted edit to a delivered spec is
+  repointing a `checkable:` reference when a check moves; the criterion text
+  must not change.
 - **Never mock git.** Tests build real repositories in `t.TempDir()` and run
   real `git` (C-9). This is not negotiable and it has already paid for itself
   three times.
