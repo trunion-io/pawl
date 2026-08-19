@@ -462,6 +462,109 @@ func TestAttestationShape(t *testing.T) {
 	}
 }
 
+// TestAttestationRecordsTheToolThatProducedIt covers PAWL-011 AC1, AC2 and AC5.
+//
+// Without this the predicate is anonymous: a signed trail cannot be traced to
+// the verifier that cleared its lines, and pawl's verdicts change between
+// versions.
+func TestAttestationRecordsTheToolThatProducedIt(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	record(t, repo, claimlog.Options{
+		Kind:       model.KindAssumption,
+		Text:       "exp is unix seconds",
+		Path:       "src/auth.py",
+		StartLine:  4,
+		EndLine:    6,
+		VerifiedBy: testRef("tests.test_auth.test_expiry"),
+	})
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	ev := collect(t, evidence.Sources{JUnit: []string{writeJUnit(t, repo)}})
+	rl := build(t, repo, "HEAD~1", loadClaims(t, repo), ev)
+
+	stmt := attest.BuildStatement(rl, attest.Options{
+		Version: "1.2.3",
+		Digest:  "sha256:abc123",
+	})
+
+	if got := stmt.Predicate.Tool.Name; got != "pawl" {
+		t.Errorf("tool.name = %q, want pawl", got)
+	}
+	// AC4: the version recorded is the one it was given, not one re-derived
+	// here. Two sources for a version is two things that can disagree.
+	if got := stmt.Predicate.Tool.Version; got != "1.2.3" {
+		t.Errorf("tool.version = %q, want 1.2.3", got)
+	}
+	if got := stmt.Predicate.Tool.Digest; got != "sha256:abc123" {
+		t.Errorf("tool.digest = %q, want sha256:abc123", got)
+	}
+
+	// AC5: the predicate schema moves, the type URL does not.
+	if got := stmt.Predicate.SchemaVersion; got != "0.2" {
+		t.Errorf("schemaVersion = %q, want 0.2", got)
+	}
+	if got := stmt.PredicateType; got != model.ClaimPredicateType {
+		t.Errorf("predicateType = %q, want it unchanged", got)
+	}
+}
+
+// TestAttestationOmitsAnUndeterminableDigest covers PAWL-011 AC3. A placeholder
+// digest is worse than an absent one because it looks like an answer.
+func TestAttestationOmitsAnUndeterminableDigest(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "feature")
+
+	rl := build(t, repo, "HEAD~1", nil, collect(t, evidence.Sources{}))
+	stmt := attest.BuildStatement(rl, attest.Options{Version: "dev", Digest: ""})
+
+	b, err := json.Marshal(stmt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(b, &wire); err != nil {
+		t.Fatal(err)
+	}
+	tool := wire["predicate"].(map[string]any)["tool"].(map[string]any)
+
+	if _, present := tool["digest"]; present {
+		t.Errorf("digest key must be absent when undeterminable, got %v", tool["digest"])
+	}
+	// AC6: a development build still identifies itself rather than going
+	// unattributed.
+	if tool["version"] != "dev" {
+		t.Errorf("tool.version = %v, want dev", tool["version"])
+	}
+}
+
+// TestClaimAndPredicateSchemasVersionIndependently guards the split made for
+// PAWL-011 AC5. They were one constant; raising the predicate to 0.2 would have
+// silently revved the on-disk claim log format too.
+func TestClaimAndPredicateSchemasVersionIndependently(t *testing.T) {
+	if model.ClaimSchemaVersion == model.PredicateSchemaVersion {
+		t.Fatalf("claim and predicate schema versions are equal (%q) — if they "+
+			"have been recoupled, two unrelated consumers now move together",
+			model.ClaimSchemaVersion)
+	}
+
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	c := record(t, repo, claimlog.Options{
+		Kind:      model.KindAssumption,
+		Text:      "claim log format is not the predicate format",
+		Path:      "src/auth.py",
+		StartLine: 4,
+		EndLine:   6,
+	})
+	if c.SchemaVersion != model.ClaimSchemaVersion {
+		t.Errorf("claim schema_version = %q, want %q", c.SchemaVersion, model.ClaimSchemaVersion)
+	}
+}
+
 // TestPartialCollapseWithinASingleHunk is the case that broke hunk-granular
 // verdicts: one hunk, two claims, one verified and one not. Only the unverified
 // span may reach the human.

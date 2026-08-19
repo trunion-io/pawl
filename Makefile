@@ -53,6 +53,23 @@ dist: ## Cross-compile every supported platform + checksums
 	done
 	@cd dist && sha256sum * > SHA256SUMS
 	@echo "checksums:" && cat dist/SHA256SUMS
+	@$(MAKE) --no-print-directory verify-dist
+
+.PHONY: verify-dist
+verify-dist: ## PAWL-011 AC9 — an artifact must report the version its name claims
+	@host="dist/$(BINARY)-$(VERSION)-$$(go env GOOS)-$$(go env GOARCH)"; \
+	if [ ! -x "$$host" ]; then \
+		echo "verify-dist: no host-native artifact at $$host"; exit 1; \
+	fi; \
+	got="$$("$$host" version | awk '{print $$2}')"; \
+	if [ "$$got" != "$(VERSION)" ]; then \
+		echo "verify-dist: FAIL — $$host reports '$$got', filename claims '$(VERSION)'"; \
+		exit 1; \
+	fi; \
+	echo "verify-dist: ok — $$host reports $$got"
+	@echo "verify-dist: note — only the host-native artifact can be executed here."
+	@echo "             Verifying the whole matrix needs a runner per platform and"
+	@echo "             belongs in the release workflow (PAWL-013 AC9)."
 
 .PHONY: clean
 clean:

@@ -20,8 +20,28 @@ type Subject struct {
 	Digest map[string]string `json:"digest"`
 }
 
+// Tool identifies the verifier that produced a statement (PAWL-011).
+//
+// Without it a signed trail cannot be traced to the thing that issued it, and
+// "these lines were cleared" cannot be interpreted — pawl's verdicts change
+// between versions, so a trail from a permissive old build and one from the
+// current build are otherwise indistinguishable.
+//
+// This does not conflict with PAWL-005's rule that the predicate type URL
+// describes the artifact and not the tool. The URL names the predicate *format*;
+// this names the *producer of one instance*. A second implementation emitting
+// this predicate would use the same URL and a different Name.
+type Tool struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// Digest is omitted rather than faked when it cannot be determined
+	// (PAWL-011 AC3): a placeholder looks like an answer.
+	Digest string `json:"digest,omitempty"`
+}
+
 type Predicate struct {
 	SchemaVersion string                  `json:"schemaVersion"`
+	Tool          Tool                    `json:"tool"`
 	GeneratedAt   string                  `json:"generatedAt"`
 	Base          string                  `json:"base"`
 	Commit        string                  `json:"commit"`

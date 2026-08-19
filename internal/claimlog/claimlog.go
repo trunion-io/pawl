@@ -138,7 +138,7 @@ func Record(repo string, opts Options) (model.Claim, error) {
 	}
 
 	claim := model.Claim{
-		SchemaVersion: model.SchemaVersion,
+		SchemaVersion: model.ClaimSchemaVersion,
 		ID:            id,
 		TS:            time.Now().UTC(),
 		Kind:          opts.Kind,

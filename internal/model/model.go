@@ -25,7 +25,16 @@ import (
 
 const (
 	ClaimPredicateType = "https://trunion.io/attestations/assumption-trail/v0.1"
-	SchemaVersion      = "0.1"
+
+	// ClaimSchemaVersion versions the claim log on disk (.pawl/claims.jsonl).
+	//
+	// PredicateSchemaVersion versions the attestation predicate. These were one
+	// constant until PAWL-011 AC5 asked for the predicate to move to 0.2 and it
+	// became clear that raising it would silently rev the claim log format too.
+	// They describe different artifacts read by different consumers and there is
+	// no reason they should ever be coupled — do not merge them back.
+	ClaimSchemaVersion     = "0.1"
+	PredicateSchemaVersion = "0.2"
 )
 
 // ClaimKind is what sort of statement the agent is making about its own work.

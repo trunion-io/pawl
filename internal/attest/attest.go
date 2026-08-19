@@ -22,6 +22,14 @@ type Options struct {
 	Repository string
 	Ticket     string
 	PolicyPack string
+	// Version is the version the running binary reports. PAWL-011 AC4 requires
+	// it to be the same string `pawl version` prints, which is why it is passed
+	// in from the CLI rather than resolved here — one source, no second place
+	// for it to disagree.
+	Version string
+	// Digest is the SHA-256 of the running binary, or "" when it could not be
+	// determined (PAWL-011 AC3).
+	Digest string
 }
 
 func BuildStatement(rl model.ReadingList, opts Options) model.Statement {
@@ -82,7 +90,12 @@ func BuildStatement(rl model.ReadingList, opts Options) model.Statement {
 			},
 		}},
 		Predicate: model.Predicate{
-			SchemaVersion: model.SchemaVersion,
+			SchemaVersion: model.PredicateSchemaVersion,
+			Tool: model.Tool{
+				Name:    "pawl",
+				Version: opts.Version,
+				Digest:  opts.Digest,
+			},
 			GeneratedAt:   time.Now().UTC().Format(time.RFC3339Nano),
 			Base:          rl.Base,
 			Commit:        rl.Commit,

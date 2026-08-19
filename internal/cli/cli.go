@@ -18,6 +18,8 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -97,7 +99,7 @@ func Run(args []string, version string) int {
 	case "verify":
 		return cmdVerify(args[1:])
 	case "attest":
-		return cmdAttest(args[1:])
+		return cmdAttest(args[1:], version)
 	case "gate":
 		return cmdGate(args[1:])
 	case "version", "--version", "-version":
@@ -421,7 +423,33 @@ func cmdVerify(args []string) int {
 	return 0
 }
 
-func cmdAttest(args []string) int {
+// selfDigest returns the SHA-256 of the running binary, or "" when it cannot be
+// determined.
+//
+// Hashing the executable at run time is the honest source: it describes the
+// binary that actually produced this statement, and a build-time constant could
+// not observe tampering. It can fail — an unreadable or deleted executable — and
+// PAWL-011 AC3 says to omit the digest when it does rather than emit a
+// placeholder, because a zero digest looks like an answer.
+func selfDigest() string {
+	path, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ""
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
+}
+
+func cmdAttest(args []string, version string) int {
 	fs := flag.NewFlagSet("attest", flag.ContinueOnError)
 	e := &evidenceFlags{}
 	e.register(fs)
@@ -441,6 +469,8 @@ func cmdAttest(args []string) int {
 		Repository: gitutil.RemoteURL(e.repo),
 		Ticket:     *ticket,
 		PolicyPack: *policyPack,
+		Version:    version,
+		Digest:     selfDigest(),
 	})
 	b, err := json.MarshalIndent(statement, "", "  ")
 	if err != nil {
