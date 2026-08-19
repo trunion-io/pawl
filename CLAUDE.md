@@ -25,20 +25,18 @@ directory.
 
 ## Where to start
 
-The next unit of work is **PAWL-007, the calibration sampler**. The verdict
-taxonomy that was blocking it is **settled** — two axes, binary verdict per span
-plus a cause per (span, claim) pair — so it is ready to build. It is the largest
-item on this list and the only one on the critical path to the demo.
+Phase 1 is complete. PAWL-007, PAWL-016, PAWL-017, PAWL-018, PAWL-019 and
+PAWL-020 are all built; the tool is not what is missing.
 
-PAWL-016, PAWL-017 and PAWL-018 are built. The hook now costs ~73 tokens per
-edit rather than 159, and stays silent on an unchanged repeat.
+**What is missing is a corpus.** The sampler has almost nothing to sample and
+the false-clear rate is a number over a handful of spans. That comes from
+sustained real use (roadmap item 7), not from more code.
 
-**PAWL-017 AC13 is the one piece outstanding** — deferring surfacing to the end
-of a turn, which needs a Stop hook. Until then the hook still speaks per edit,
-just far more cheaply.
-
-Then PAWL-007. It has almost nothing to sample until a corpus exists: this repo
-clears 6.9% of its own changed lines and most carry no record at all.
+**Verify PAWL-020 before relying on it.** The turn-boundary binding closes the
+shell-edit gap and every criterion is tested, but whether the harness's Stop
+event fires — and puts its reason where an agent acts on it — has not been seen
+in a live session. Confirm by observation. AC6 keeps the per-edit binding as the
+fallback if it turns out unreliable.
 
 Other unblocked work, in rough order of value:
 
