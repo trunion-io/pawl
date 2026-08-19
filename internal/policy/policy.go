@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"trunion.io/pawl/internal/model"
@@ -39,6 +40,9 @@ type Policy struct {
 	// BlockOnUndetermined: an agent that could not establish something and
 	// proceeded anyway always escalates, whatever the tests say.
 	BlockOnUndetermined bool
+	// Warnings holds diagnostics that do not invalidate the policy (PAWL-026
+	// AC5), such as a key the gate does not recognise.
+	Warnings []string
 	// SensitivePaths: paths where implicit coverage is not good enough and a
 	// claim must assert a named check.
 	SensitivePaths []string
@@ -69,6 +73,101 @@ type Decision struct {
 	Violations []Violation `json:"violations"`
 }
 
+// Threshold parsing (PAWL-026).
+//
+// AC6 is the rule these implement: reject a policy no less strictly than it
+// would have been applied. Refusing to run is a safe outcome; enforcing a
+// threshold the operator did not write is not, and the operator has no way to
+// notice — they read their own file and believe it.
+//
+// The int64-to-int conversions these replace were reported as high severity by
+// static analysis. They could not truncate on any platform pawl ships, where int
+// is 64 bits, so the finding was not exploitable. It is fixed by construction
+// anyway: the safety of that conversion is a property of the current build
+// targets rather than of the language, and a future GOARCH=386 would invalidate
+// it silently.
+
+func typeError(path, key, want string, got any) error {
+	return fmt.Errorf("%s: %s must be %s, got %v (%T)", path, key, want, got, got)
+}
+
+// intThreshold reads a whole-number threshold, rejecting anything the gate
+// cannot hold exactly (AC1), anything negative (AC2) and anything of the wrong
+// type (AC3).
+func intThreshold(values map[string]any, key, path string) (int, bool, error) {
+	raw, present := values[key]
+	if !present {
+		return 0, false, nil
+	}
+	v, ok := raw.(int64)
+	if !ok {
+		return 0, false, typeError(path, key, "a whole number", raw)
+	}
+	if v < 0 {
+		// Not merely meaningless: a negative bound invites a comparison written
+		// for a positive one to read it as "no limit".
+		return 0, false, fmt.Errorf("%s: %s must not be negative, got %d", path, key, v)
+	}
+	if int64(int(v)) != v {
+		return 0, false, fmt.Errorf(
+			"%s: %s is %d, which this build cannot represent exactly", path, key, v)
+	}
+	return int(v), true, nil
+}
+
+// floatThreshold accepts a whole number too, since 1 is a reasonable way to
+// write a ratio of 1.0 and rejecting it would be pedantry rather than safety.
+func floatThreshold(values map[string]any, key, path string) (float64, bool, error) {
+	raw, present := values[key]
+	if !present {
+		return 0, false, nil
+	}
+	var v float64
+	switch n := raw.(type) {
+	case float64:
+		v = n
+	case int64:
+		v = float64(n)
+	default:
+		return 0, false, typeError(path, key, "a number", raw)
+	}
+	if v < 0 {
+		return 0, false, fmt.Errorf("%s: %s must not be negative, got %v", path, key, v)
+	}
+	return v, true, nil
+}
+
+// knownKeys is the set the gate acts on. The struct comment above has always
+// said a typo in a key name should not silently fall back to a default; this is
+// what makes that true.
+var knownKeys = map[string]bool{
+	"max_changed_lines":     true,
+	"max_must_read_ratio":   true,
+	"max_unclaimed_lines":   true,
+	"block_on_undetermined": true,
+	"sensitive_paths":       true,
+}
+
+// unknownKeys reports keys the gate does not act on (AC5).
+//
+// A warning rather than a rejection, deliberately. A misspelled key leaving a
+// default silently in force is the same failure as a truncated value — the
+// operator believes they configured something and did not — but rejecting
+// outright would break a policy file written for a later pawl against an older
+// binary. Resolving that tension properly needs a schema version, which PAWL-026
+// names and does not decide.
+func unknownKeys(values map[string]any, path string) []string {
+	var out []string
+	for k := range values {
+		if !knownKeys[k] {
+			out = append(out, fmt.Sprintf(
+				"%s: unrecognised key %q; it has no effect and the default remains in force", path, k))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func Load(repo string) (Policy, error) {
 	p := Defaults()
 	path := filepath.Join(repo, PolicyFile)
@@ -90,24 +189,37 @@ func Load(repo string) (Policy, error) {
 		values = tables[""]
 	}
 
-	if v, ok := values["max_changed_lines"].(int64); ok {
-		p.MaxChangedLines = int(v)
+	if v, ok, err := intThreshold(values, "max_changed_lines", path); err != nil {
+		return Defaults(), err
+	} else if ok {
+		p.MaxChangedLines = v
 	}
-	if v, ok := values["max_must_read_ratio"].(float64); ok {
+	if v, ok, err := floatThreshold(values, "max_must_read_ratio", path); err != nil {
+		return Defaults(), err
+	} else if ok {
 		p.MaxMustReadRatio = v
 	}
-	if v, ok := values["max_must_read_ratio"].(int64); ok {
-		p.MaxMustReadRatio = float64(v)
+	if v, ok, err := intThreshold(values, "max_unclaimed_lines", path); err != nil {
+		return Defaults(), err
+	} else if ok {
+		p.MaxUnclaimedLines = v
 	}
-	if v, ok := values["max_unclaimed_lines"].(int64); ok {
-		p.MaxUnclaimedLines = int(v)
-	}
-	if v, ok := values["block_on_undetermined"].(bool); ok {
+	if raw, present := values["block_on_undetermined"]; present {
+		v, ok := raw.(bool)
+		if !ok {
+			return Defaults(), typeError(path, "block_on_undetermined", "true or false", raw)
+		}
 		p.BlockOnUndetermined = v
 	}
-	if v, ok := values["sensitive_paths"].([]string); ok {
+	if raw, present := values["sensitive_paths"]; present {
+		v, ok := raw.([]string)
+		if !ok {
+			return Defaults(), typeError(path, "sensitive_paths", "a list of strings", raw)
+		}
 		p.SensitivePaths = v
 	}
+
+	p.Warnings = unknownKeys(values, path)
 	p.Accounting = loadAccounting(tables)
 	return p, nil
 }

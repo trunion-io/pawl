@@ -505,6 +505,17 @@ func cmdPrune(args []string) int {
 	return 0
 }
 
+// warnPolicy prints diagnostics that do not invalidate a policy (PAWL-026 AC5).
+//
+// To stderr, so it cannot corrupt the JSON on stdout that CI consumes, and
+// unconditionally, because the whole point of the warning is that the operator
+// believes they configured something they did not.
+func warnPolicy(pol policy.Policy) {
+	for _, w := range pol.Warnings {
+		fmt.Fprintln(os.Stderr, "warning:", w)
+	}
+}
+
 // cmdAckAuto applies the client's deterministic rules (PAWL-017 AC1).
 //
 // Rules can only ever acknowledge — say there was nothing to assume. They can
@@ -515,6 +526,7 @@ func cmdAckAuto(repo string, dryRun bool, harness, modelName, session string) in
 	if err != nil {
 		return fail(err)
 	}
+	warnPolicy(pol)
 	if pol.Accounting.Empty() {
 		fmt.Println("no acknowledgement rules configured; add an [accounting] table to .pawl/policy.toml")
 		return 0
@@ -596,6 +608,7 @@ func cmdSample(args []string, version string) int {
 	if err != nil {
 		return fail(err)
 	}
+	warnPolicy(pol)
 	id := rl.Tree
 	if len(id) > 12 {
 		id = id[:12]
@@ -1453,6 +1466,7 @@ func cmdGate(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+	warnPolicy(p)
 	decision := policy.Evaluate(rl, p)
 
 	if *asJSON {
