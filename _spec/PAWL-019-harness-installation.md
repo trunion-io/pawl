@@ -93,6 +93,14 @@ beyond pawl itself.
 that pawl brings nothing with it; a hook that needs a JSON processor installed
 quietly gives that up.
 
+**AC10a** — Where the hook is invoked with a terminal on standard input, it
+shall print usage and exit non-zero rather than waiting for input.
+`checkable: yes` (once built) — found by running it at a prompt, where it hung
+with no output and no indication why. A hook entry point is not an interactive
+command, but "not for interactive use" in a usage string does not help someone
+who has already run it and is watching a cursor blink. Silence is correct for a
+harness and wrong for a human, and the two are distinguishable.
+
 **AC10** — Where anything fails, the hook shall exit zero and produce no output.
 `checkable: yes` (once built) — carried forward from PAWL-016 AC9 and now more
 important, because a user-level hook fires on every edit in every project.

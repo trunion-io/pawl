@@ -173,6 +173,14 @@ key order is not. Check the backup if you want the original layout.
 
 Open `/hooks` once, or restart, for the harness to pick it up.
 
+`pawl hook claude-code` is the entry point the settings file points at. It reads
+the harness payload on **stdin**, so running it bare at a prompt does nothing
+useful — it now says so rather than waiting. To try it by hand:
+
+```bash
+echo '{"tool_input":{"file_path":"'$PWD'/somefile.go"}}' | pawl hook claude-code
+```
+
 The hook **informs; it does not enforce**. Enforcement is already the gate's job
 — `max_unclaimed_lines` blocks the merge. What only a hook can do is supply the
 span *at the moment of the edit*, so the answer is evidence rather than a

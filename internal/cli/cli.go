@@ -824,6 +824,16 @@ func sortedKeysInt(m map[string]int) []string {
 // cmdHook is the harness entry point (PAWL-019). Never fails the edit loop.
 func cmdHook(args []string) int {
 	harnessName, _ := takeLeadingPositional(args)
+	// AC10a: a harness pipes a payload in; a human at a prompt gets a blinking
+	// cursor and no clue why. Silence is right for the first and wrong for the
+	// second, and a character device on stdin tells them apart.
+	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+		fmt.Fprintln(os.Stderr, "pawl hook reads a harness payload on stdin; it is not an interactive command.")
+		fmt.Fprintln(os.Stderr, "Install it with:  pawl setup claude")
+		fmt.Fprintln(os.Stderr, "Try it with:      echo '{\"tool_input\":{\"file_path\":\"'$PWD'/somefile\"}}' | pawl hook claude-code")
+		return 2
+	}
+
 	switch harnessName {
 	case "claude-code":
 		_ = harness.ClaudeCodeHook(os.Stdin, os.Stdout)

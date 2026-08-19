@@ -221,3 +221,22 @@ func TestHookSurvivesGarbage(t *testing.T) {
 		}
 	}
 }
+
+// TestHookRefusesATerminal is PAWL-019 AC10a. Found by running it at a prompt,
+// where it hung with no output and no indication why.
+//
+// Silence is correct for a harness and wrong for a human. The two are
+// distinguishable, so the tool should distinguish them rather than making a
+// person guess.
+func TestHookRefusesATerminal(t *testing.T) {
+	// The guard lives in the CLI because it is about how the process was
+	// invoked, not about the payload. What is asserted here is the half that is
+	// testable without a pty: a non-terminal stdin must still be read normally.
+	var out strings.Builder
+	if err := harness.ClaudeCodeHook(strings.NewReader(`{}`), &out); err != nil {
+		t.Fatalf("a piped payload must still be handled: %v", err)
+	}
+	if out.String() != "" {
+		t.Errorf("an empty payload should produce nothing, got %q", out.String())
+	}
+}
