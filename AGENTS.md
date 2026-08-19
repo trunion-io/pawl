@@ -193,6 +193,15 @@ to pawl:
   span. Until it does, the ~85% unclaimed rate measured on this repo stands, and
   `max_unclaimed_lines = 0` keeps pressuring agents to backfill against a
   finished diff, which is the failure C-2 forbids.
+- **The PAWL-016 hook does not load, and nothing said so.** Its config sits in
+  `<repo>/.claude/settings.json`, which Claude Code reads only when that repo is
+  the project root — working on pawl from a parent directory gets no hook at all,
+  silently. Verified: a `Write` produced no injected context while the script
+  produced the right output by hand. PAWL-019 specs the fix.
+- **An agent editing through shell bypasses accounting entirely.** The matcher is
+  `Edit|Write|MultiEdit`; `sed`, heredocs and scripts match none of them, so no
+  prompt fires and the gap only surfaces at PR time — the C-2 backfill situation
+  the hook exists to prevent. Open question on PAWL-019.
 - **The `spec:` evidence type cannot resolve, and citing it makes a claim
   permanently unverified.** It requires a signed spec attestation, which
   requires the spec tool — PAWL-009, drafted and not built. Found by dogfooding
