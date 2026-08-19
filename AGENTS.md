@@ -53,7 +53,7 @@ Run from this directory. [`.envrc`](./.envrc) puts `./bin` on PATH, so once
 you have built, `pawl` means this build.
 
 ```bash
-make test                           # 13 e2e tests, all must pass
+make test                           # 33 e2e tests, all must pass
 make build                          # ./bin/pawl
 make dist                           # 5 platforms + SHA256SUMS
 make check                          # fmt + vet + test, what CI runs

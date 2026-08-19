@@ -15,7 +15,7 @@ holds only what is specific to working in pawl.
 cd pawl && make check
 ```
 
-`make check` is fmt + vet + the e2e suite: 13 tests, all must pass before and
+`make check` is fmt + vet + the e2e suite: 33 tests, all must pass before and
 after any change. If they don't pass on a clean checkout, fix that before
 anything else — do not work around it.
 
@@ -44,7 +44,7 @@ Other unblocked work, in rough order of value:
 
 1. **Test the CLI.** The e2e suite drives the packages directly and never
    invokes `cmd/pawl`. A flag-parsing bug that made `pawl claim` a silent no-op
-   shipped past all ten tests. A handful of tests that exec the built binary
+   shipped past every one of them. A handful of tests that exec the built binary
    would have caught it.
 2. Close the untested criteria flagged `checkable: partially` in
    [`./_spec/PAWL-004-reading-list.md`](./_spec/PAWL-004-reading-list.md)
