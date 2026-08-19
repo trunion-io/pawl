@@ -15,7 +15,7 @@ holds only what is specific to working in pawl.
 cd pawl && make check
 ```
 
-`make check` is fmt + vet + the e2e suite: 10 tests, all must pass before and
+`make check` is fmt + vet + the e2e suite: 13 tests, all must pass before and
 after any change. If they don't pass on a clean checkout, fix that before
 anything else — do not work around it.
 
@@ -31,24 +31,19 @@ Do not start coding it. If asked to work on it, surface the open decision first.
 
 Unblocked work, in rough order of value:
 
-1. **Record the tool in the attestation.** The predicate has no pawl version or
-   binary digest, so a signed trail cannot be traced to the verifier that issued
-   it. `main.version` is already injected at build time and reaches
-   `cli.Run`; it needs to reach `attest.BuildStatement`. Smallest change on this
-   list with the largest credibility payoff.
-2. **Test the CLI.** The e2e suite drives the packages directly and never
+1. **Test the CLI.** The e2e suite drives the packages directly and never
    invokes `cmd/pawl`. A flag-parsing bug that made `pawl claim` a silent no-op
    shipped past all ten tests. A handful of tests that exec the built binary
    would have caught it.
-3. Close the untested criteria flagged `checkable: partially` in
+2. Close the untested criteria flagged `checkable: partially` in
    [`./_spec/PAWL-004-reading-list.md`](./_spec/PAWL-004-reading-list.md)
    AC4 and AC5 — the claim-log exclusion and the non-semantic-line filter were
    both found in a live demo rather than by the suite, which is the wrong way
    round.
-4. [`./_spec/PAWL-006-policy-gate.md`](./_spec/PAWL-006-policy-gate.md)
+3. [`./_spec/PAWL-006-policy-gate.md`](./_spec/PAWL-006-policy-gate.md)
    AC1, AC3, AC5 — policy file loading, must-read ratio and sensitive paths are
    implemented but untested.
-5. [`./_spec/PAWL-003-coverage-resolution.md`](./_spec/PAWL-003-coverage-resolution.md)
+4. [`./_spec/PAWL-003-coverage-resolution.md`](./_spec/PAWL-003-coverage-resolution.md)
    AC3 — skipped-test handling has no dedicated test.
 
 ## Working style in this product

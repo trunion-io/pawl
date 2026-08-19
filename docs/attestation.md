@@ -38,7 +38,8 @@ A consumer parsing these should key on the URL, not on anything about pawl.
 
 | Field | What |
 |---|---|
-| `schemaVersion` | Predicate schema version |
+| `schemaVersion` | Predicate schema version, independent of the tool version |
+| `tool` | The verifier that produced this statement — name, version, binary digest |
 | `generatedAt` | RFC3339 timestamp |
 | `base`, `commit` | The changeset boundaries |
 | `ticket`, `policyPack` | Free-form provenance, from flags |
@@ -131,12 +132,26 @@ subjects. [GUAC](https://guac.sh) sits at the aggregation layer above it. Either
 is the right home for these once you have enough to query — neither belongs on
 day one, and pawl will not grow into one.
 
-## Known gap
+## Tool provenance
 
-The predicate does **not currently record which pawl produced it** — there is no
-tool version or binary digest in it. An auditor holding a signed trail cannot
-tell whether a permissive old verifier or the current one cleared those lines.
+The predicate records the verifier that produced it:
 
-For a provenance tool this is the most significant gap in the schema, and it is
-being specified before a first client. Until then, record the pawl version
-alongside the trail yourself — the CI example passes it as `--policy-pack`.
+```json
+"tool": {
+  "name": "pawl",
+  "version": "0.1.0",
+  "digest": "sha256:b15d26099cb9aba3ee5eb1cc53181fd284d5b0fab342678071dd412b19489a8e"
+}
+```
+
+`version` is the same string `pawl version` prints. `digest` is the SHA-256 of
+the running binary, hashed at run time so it describes what actually produced
+the statement — check it against the `SHA256SUMS` of the release you installed.
+
+Where the digest cannot be determined the field is **omitted rather than
+faked**, so its absence is meaningful: it says pawl could not read its own
+executable, not that the binary hashes to zero.
+
+`schemaVersion` is `0.2`. It versions independently of both the tool and the
+predicate type URL, so key on the URL and read `schemaVersion` to know which
+fields to expect.

@@ -132,7 +132,10 @@ Phase 1 (build the kit) — **items 1–5 DONE**
 
 Phase 2 (prove it)
 
-7. ⬜ Run pawl on a real repo for a sustained stretch
+7. 🔄 Run pawl on a real repo for a sustained stretch — **started**. `git init` on
+   this repo made it possible; pawl now runs on itself and the first claims are
+   recorded. It reported 0% collapsed and 143 unclaimed lines on its own
+   changeset, which is honest and is the baseline to improve from.
 8. ⬜ Capture before/after: human review minutes per merged changeset, escalation
    precision, false-clear rate. **This is the demo.**
 9. ⬜ Spec bridge — see [`./_spec/PAWL-009-spec-tool.md`](./_spec/PAWL-009-spec-tool.md)
@@ -186,11 +189,15 @@ to pawl:
 ## Known gaps — do not present these as solved
 
 - No calibration sampler. Everything is unmeasured until item 6 exists.
-- **The attestation does not record which pawl produced it.** The predicate
-  carries `schemaVersion` but no tool version or binary digest, so an auditor
-  holding a signed trail cannot tell which verifier cleared those lines. For a
-  provenance product this is the most embarrassing gap on the list. Fix before a
-  first client.
+- **The `spec:` evidence type cannot resolve, and citing it makes a claim
+  permanently unverified.** It requires a signed spec attestation, which
+  requires the spec tool — PAWL-009, drafted and not built. Found by dogfooding
+  within minutes of starting: three of the first four claims recorded in this
+  repo cite `spec:PAWL-011-ACn` and can never clear. The claim log is
+  append-only, so those claims stay wrong as a permanent record, which is the
+  design behaving correctly. **Until PAWL-009 ships, do not cite `spec:`
+  evidence** — an assertion that cannot be resolved is the exact
+  asserted-but-missing-check antipattern C-1 exists to refuse.
 - **The CLI itself is untested.** The e2e suite calls the packages directly and
   never invokes `cmd/pawl`. A flag-parsing bug that made `pawl claim` a no-op
   shipped past all ten tests and was caught by hand. Same hole existed in the

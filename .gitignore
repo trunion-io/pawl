@@ -9,3 +9,6 @@ dist/
 # counting it would inflate the denominator and put the trail on its own
 # reading list.
 .pawl/
+# Evidence generated during a local dogfood run
+junit.xml
+coverage.xml

@@ -132,9 +132,9 @@ it.
 
 ## Known gaps
 
-- **The attestation does not record which pawl produced it.** No tool version or
-  binary digest in the predicate, so a signed trail cannot be traced back to the
-  verifier that issued it. To be fixed before a first client.
+- **The `spec:` evidence type cannot resolve.** It needs a signed spec
+  attestation, which needs the spec tool (PAWL-009, not built). A claim citing
+  `spec:` today will never clear — do not use it yet.
 - The CLI is not covered by the test suite; the suite drives the packages
   directly. A flag-parsing bug that made `pawl claim` a no-op once shipped past
   all ten tests.
