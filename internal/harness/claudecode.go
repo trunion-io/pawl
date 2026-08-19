@@ -43,29 +43,57 @@ type hookReply struct {
 // carries the rest.
 const maxRanges = 6
 
-// ClaudeCodeHook reads a PostToolUse payload and writes any reply to w.
+// Input tells the hook what to report on (AC11).
+//
+// Resolution order is: an explicit path, then a payload on stdin, then the
+// working tree. Every invocation does something useful — "no input" is not an
+// error, it is the case with the most obvious default.
+type Input struct {
+	// Path, when set, wins over anything on stdin.
+	Path string
+	// Stdin carries a harness payload. Nil when there is none to read.
+	Stdin io.Reader
+	// Interactive is true when a person ran the command rather than a harness.
+	// It decides what happens when there is no usable payload: a person gets
+	// the working tree, a harness gets silence (AC12, AC13).
+	Interactive bool
+	// Repo is where to look when falling back to the working tree.
+	Repo string
+}
+
+// ClaudeCodeHook reports unaccounted spans and writes any reply to w.
 //
 // Every failure path returns nil having written nothing (AC10). A user-level
 // hook fires on every edit in every project, so one that can break an edit loop
 // when it malfunctions would be uninstalled the first time it did, and deserve
 // to be. There is no error worth reporting here that is worth that risk.
-func ClaudeCodeHook(r io.Reader, w io.Writer) error {
-	var p hookPayload
-	raw, err := io.ReadAll(r)
-	if err != nil {
-		return nil
-	}
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return nil
+func ClaudeCodeHook(in Input, w io.Writer) error {
+	file := in.Path
+
+	// A payload only matters when no path was given explicitly.
+	if file == "" && in.Stdin != nil {
+		raw, err := io.ReadAll(in.Stdin)
+		if err == nil {
+			var p hookPayload
+			if json.Unmarshal(raw, &p) == nil {
+				file = p.ToolInput.FilePath
+				if file == "" {
+					file = p.ToolResponse.FilePath
+				}
+			}
+		}
 	}
 
-	file := p.ToolInput.FilePath
+	// AC13: a pipe with nothing usable on it is a harness call that went wrong,
+	// and silence is the right answer. AC11/AC12: a person gets the working
+	// tree instead.
 	if file == "" {
-		file = p.ToolResponse.FilePath
+		if !in.Interactive {
+			return nil
+		}
+		return wholeTree(in.Repo, w)
 	}
-	if file == "" {
-		return nil
-	}
+
 	abs, err := filepath.Abs(file)
 	if err != nil {
 		return nil
@@ -112,6 +140,43 @@ func ClaudeCodeHook(r io.Reader, w io.Writer) error {
 	var reply hookReply
 	reply.HookSpecificOutput.HookEventName = "PostToolUse"
 	reply.HookSpecificOutput.AdditionalContext = message(rel, spans)
+	return json.NewEncoder(w).Encode(reply)
+}
+
+// wholeTree reports everything unaccounted in a repository, which is what a
+// person running the command bare almost always means (AC11).
+func wholeTree(repo string, w io.Writer) error {
+	if repo == "" {
+		repo = "."
+	}
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		return nil
+	}
+	root, ok := repoOf(filepath.Join(abs, "x"))
+	if !ok {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(root, ".pawl")); err != nil {
+		return nil
+	}
+
+	claims, err := claimlog.Load(root)
+	if err != nil {
+		return nil
+	}
+	acks, err := claimlog.LoadAcks(root)
+	if err != nil {
+		return nil
+	}
+	spans, err := resolve.Pending(root, claims, acks, nil)
+	if err != nil || len(spans) == 0 {
+		return nil
+	}
+
+	var reply hookReply
+	reply.HookSpecificOutput.HookEventName = "PostToolUse"
+	reply.HookSpecificOutput.AdditionalContext = message("the working tree", spans)
 	return json.NewEncoder(w).Encode(reply)
 }
 

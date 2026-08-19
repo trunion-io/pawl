@@ -93,13 +93,49 @@ beyond pawl itself.
 that pawl brings nothing with it; a hook that needs a JSON processor installed
 quietly gives that up.
 
-**AC10a** — Where the hook is invoked with a terminal on standard input, it
-shall print usage and exit non-zero rather than waiting for input.
-`checkable: yes` (once built) — found by running it at a prompt, where it hung
-with no output and no indication why. A hook entry point is not an interactive
-command, but "not for interactive use" in a usage string does not help someone
-who has already run it and is watching a cursor blink. Silence is correct for a
-harness and wrong for a human, and the two are distinguishable.
+### The hook is a normal command
+
+**AC11** — The system shall resolve what to report in this order: a path given
+as an argument, then a payload on standard input, then the working tree.
+`checkable: yes` (once built) — every invocation does something useful. The
+first version blocked forever when run at a prompt, and the first fix made it
+refuse outright; both treated "no input" as an error when it is simply the case
+with the most obvious default.
+
+**AC12** — Where standard input is a terminal, the system shall not wait for
+input.
+`checkable: yes` (once built) — a person running the command gets an answer, not
+a blinking cursor.
+
+**AC13** — Where standard input is not a terminal and carries no usable payload,
+the system shall produce no output and exit zero.
+`checkable: yes` (once built) — a pipe with nothing readable on it is a harness
+call that went wrong, and AC10 governs that. The distinction between a person
+and a harness is observable, so the tool observes it rather than making the
+person guess.
+
+**AC16** — The system shall accept the directory to install into, defaulting to
+the user's home directory when none is given.
+`checkable: yes` (once built) — the default is what fixes the loading problem,
+but a team that wants the configuration committed beside their repository should
+not have to hand-edit JSON to get it. This is also what makes the install
+testable against a temporary directory rather than against whoever is running
+the suite.
+
+### The configuration ships in the binary
+
+**AC14** — The system shall hold the harness configuration it installs as a
+single definition compiled into the binary.
+`checkable: yes` (once built) — assembling the JSON at the point of use spreads
+the shape of a working configuration across code, documentation and whatever a
+user pasted from a README. One definition, shipped with the binary that
+implements it, cannot drift from itself.
+
+**AC15** — The system shall derive the marker it uses for idempotency and
+uninstall from that same definition.
+`checkable: yes` (once built) — a separately declared constant is a second
+source of truth for "which entry is ours", and the failure when they disagree is
+an uninstall that leaves the hook in place.
 
 **AC10** — Where anything fails, the hook shall exit zero and produce no output.
 `checkable: yes` (once built) — carried forward from PAWL-016 AC9 and now more

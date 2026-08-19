@@ -10,6 +10,7 @@ package harness
 // and deserves to.
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,12 +18,48 @@ import (
 	"time"
 )
 
-// HookCommand identifies pawl's entry in a settings file. It is the marker used
-// for both idempotency and uninstall — anything else in there belongs to
-// somebody else and is never touched.
-const HookCommand = "pawl hook claude-code"
+// claudeCodeConfig is the configuration pawl installs, compiled into the binary
+// (AC14).
+//
+// Assembling this JSON at the point of use would spread the shape of a working
+// configuration across code, documentation, and whatever a user pasted out of a
+// README. One definition, shipped with the binary that implements it, cannot
+// drift from itself.
+//
+//go:embed claude-code.json
+var claudeCodeConfig []byte
 
-const hookMatcher = "Edit|Write|MultiEdit"
+// HookCommand identifies pawl's entry in a settings file, and is read out of
+// the embedded configuration rather than declared again (AC15).
+//
+// A separately declared constant would be a second source of truth for "which
+// entry is ours", and the failure when the two disagree is an uninstall that
+// silently leaves the hook in place.
+func HookCommand() string {
+	group, err := configGroup()
+	if err != nil {
+		return ""
+	}
+	inner, _ := group["hooks"].([]any)
+	for _, h := range inner {
+		if entry, ok := h.(map[string]any); ok {
+			if cmd, ok := entry["command"].(string); ok {
+				return cmd
+			}
+		}
+	}
+	return ""
+}
+
+// configGroup decodes the embedded configuration. A fresh copy each call, so a
+// caller mutating what it merges cannot corrupt the definition for the next one.
+func configGroup() (map[string]any, error) {
+	var g map[string]any
+	if err := json.Unmarshal(claudeCodeConfig, &g); err != nil {
+		return nil, fmt.Errorf("embedded harness config is not valid JSON: %w", err)
+	}
+	return g, nil
+}
 
 // SettingsPath is where Claude Code keeps user-level settings. User level is
 // the point: project-level configuration only loads when that project is the
@@ -88,6 +125,15 @@ func plan(home string, add bool) (Plan, error) {
 // decoding into a struct would silently drop every key pawl does not know
 // about, which is precisely what AC2 forbids.
 func mutate(settings map[string]any, add bool) bool {
+	group, err := configGroup()
+	if err != nil {
+		return false
+	}
+	marker := HookCommand()
+	if marker == "" {
+		return false
+	}
+
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
 		if !add {
@@ -108,7 +154,7 @@ func mutate(settings map[string]any, add bool) bool {
 		inner, _ := group["hooks"].([]any)
 		for hi, h := range inner {
 			entry, _ := h.(map[string]any)
-			if entry == nil || entry["command"] != HookCommand {
+			if entry == nil || entry["command"] != marker {
 				continue
 			}
 			if add {
@@ -137,15 +183,7 @@ func mutate(settings map[string]any, add bool) bool {
 	if !add {
 		return false
 	}
-	hooks["PostToolUse"] = append(events, map[string]any{
-		"matcher": hookMatcher,
-		"hooks": []any{map[string]any{
-			"type":          "command",
-			"command":       HookCommand,
-			"timeout":       10,
-			"statusMessage": "pawl: checking accounting",
-		}},
-	})
+	hooks["PostToolUse"] = append(events, group)
 	return true
 }
 

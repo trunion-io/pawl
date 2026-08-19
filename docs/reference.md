@@ -149,10 +149,14 @@ pawl setup claude --uninstall  # remove pawl's hook, leave everything else
 
 | Flag | Default | Notes |
 |---|---|---|
+| `--dir` | your home directory | Install into `<dir>/.claude/settings.json` |
 | `--dry-run` | off | Print the resulting settings; write nothing |
 | `--uninstall` | off | Remove pawl's hook only |
 
-This writes to `~/.claude/settings.json` — **user-level, not project-level**.
+By default this writes to `~/.claude/settings.json` — **user-level, not
+project-level**. Use `--dir <path>` to install into a specific directory
+instead, which is how you get the configuration committed beside a repository if
+your team prefers that.
 Project settings load only when that project is the root, so a hook configured
 in one repository is silently absent whenever you work from a parent directory.
 User settings apply everywhere, which is what makes the hook actually fire.
@@ -173,13 +177,35 @@ key order is not. Check the backup if you want the original layout.
 
 Open `/hooks` once, or restart, for the harness to pick it up.
 
-`pawl hook claude-code` is the entry point the settings file points at. It reads
-the harness payload on **stdin**, so running it bare at a prompt does nothing
-useful — it now says so rather than waiting. To try it by hand:
+### `pawl hook claude-code`
+
+The entry point the settings file points at, and a normal command you can run
+yourself. It reports unaccounted spans, resolving what to look at in this order:
 
 ```bash
-echo '{"tool_input":{"file_path":"'$PWD'/somefile.go"}}' | pawl hook claude-code
+pawl hook claude-code src/auth.go     # 1. an explicit path wins
+… | pawl hook claude-code             # 2. a harness payload on stdin
+pawl hook claude-code                 # 3. otherwise the whole working tree
 ```
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--repo` | `.` | Repository root, when falling back to the working tree |
+
+Running it bare at a prompt gives you the working tree — it does not wait for
+input. A **pipe** carrying nothing usable is treated differently: that is a
+harness call that went wrong, and it stays silent rather than scanning the tree
+on every edit.
+
+It also stays quiet when the same set of spans was already surfaced, so editing
+one file repeatedly does not repeat the same message.
+
+### The configuration ships in the binary
+
+`pawl setup claude` installs a configuration compiled into pawl itself, not one
+assembled at the point of use or copied out of this page. The marker used for
+idempotency and uninstall is read from that same definition, so "which entry is
+ours" cannot disagree with what was installed.
 
 The hook **informs; it does not enforce**. Enforcement is already the gate's job
 — `max_unclaimed_lines` blocks the merge. What only a hook can do is supply the

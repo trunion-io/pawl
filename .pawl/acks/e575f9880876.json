@@ -1,0 +1,1 @@
+{"schema_version":"0.1","id":"e575f9880876","ts":"2026-08-19T18:38:02.143613834Z","path":"internal/harness/claude-code.json","start_line":1,"end_line":11,"fingerprint":"sha256:ceb5ad7c02d3256b5b064bea31ceb7f29a61debda62eb75503bb0927ffb9fd0c","author":{"role":"agent","harness":"claude-code"},"origin":"agent"}

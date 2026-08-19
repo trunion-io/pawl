@@ -823,28 +823,41 @@ func sortedKeysInt(m map[string]int) []string {
 
 // cmdHook is the harness entry point (PAWL-019). Never fails the edit loop.
 func cmdHook(args []string) int {
-	harnessName, _ := takeLeadingPositional(args)
-	// AC10a: a harness pipes a payload in; a human at a prompt gets a blinking
-	// cursor and no clue why. Silence is right for the first and wrong for the
-	// second, and a character device on stdin tells them apart.
-	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
-		fmt.Fprintln(os.Stderr, "pawl hook reads a harness payload on stdin; it is not an interactive command.")
-		fmt.Fprintln(os.Stderr, "Install it with:  pawl setup claude")
-		fmt.Fprintln(os.Stderr, "Try it with:      echo '{\"tool_input\":{\"file_path\":\"'$PWD'/somefile\"}}' | pawl hook claude-code")
+	harnessName, args := takeLeadingPositional(args)
+
+	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
+	repo := fs.String("repo", ".", "Repository root, when falling back to the working tree.")
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "usage: pawl hook claude-code [<file>]")
+		fmt.Fprintln(fs.Output(), "\nReports unaccounted spans. Reads a harness payload on stdin when")
+		fmt.Fprintln(fs.Output(), "there is one; otherwise takes a file argument, otherwise the whole")
+		fmt.Fprintln(fs.Output(), "working tree. Install it with: pawl setup claude")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if harnessName != "claude-code" {
+		fs.Usage()
 		return 2
 	}
 
-	switch harnessName {
-	case "claude-code":
-		_ = harness.ClaudeCodeHook(os.Stdin, os.Stdout)
-		return 0
-	case "":
-		fmt.Fprintln(os.Stderr, "usage: pawl hook claude-code")
-		return 2
-	default:
-		fmt.Fprintf(os.Stderr, "unknown harness %q; known: claude-code\n", harnessName)
-		return 2
+	// A terminal on stdin means a person ran this. Reading it would block
+	// forever, which is what the first version did (AC12).
+	interactive := true
+	var stdin io.Reader
+	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice == 0 {
+		interactive = false
+		stdin = os.Stdin
 	}
+
+	_ = harness.ClaudeCodeHook(harness.Input{
+		Path:        fs.Arg(0),
+		Stdin:       stdin,
+		Interactive: interactive,
+		Repo:        *repo,
+	}, os.Stdout)
+	return 0
 }
 
 // cmdSetup installs the hook into the user's harness settings (AC1-AC6).
@@ -853,8 +866,9 @@ func cmdSetup(args []string) int {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	dryRun := fs.Bool("dry-run", false, "Show the resulting settings; write nothing.")
 	uninstall := fs.Bool("uninstall", false, "Remove pawl's hook, leaving everything else.")
+	dir := fs.String("dir", "", "Install into <dir>/.claude/settings.json. Defaults to your home directory.")
 	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), "usage: pawl setup claude [--dry-run] [--uninstall]")
+		fmt.Fprintln(fs.Output(), "usage: pawl setup claude [--dir <path>] [--dry-run] [--uninstall]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -865,16 +879,24 @@ func cmdSetup(args []string) int {
 		return 2
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fail(err)
+	// Default to home: user-level settings load in every project, which is what
+	// makes the hook actually fire. --dir is for a team that wants the config
+	// committed beside their repository instead (AC16).
+	base := *dir
+	if base == "" {
+		var err error
+		base, err = os.UserHomeDir()
+		if err != nil {
+			return fail(err)
+		}
 	}
 
 	var p harness.Plan
+	var err error
 	if *uninstall {
-		p, err = harness.Uninstall(home)
+		p, err = harness.Uninstall(base)
 	} else {
-		p, err = harness.Install(home)
+		p, err = harness.Install(base)
 	}
 	if err != nil {
 		return fail(err)

@@ -124,7 +124,7 @@ func TestUninstallRemovesOnlyOurs(t *testing.T) {
 	}
 
 	body := string(u.Result)
-	if strings.Contains(body, harness.HookCommand) {
+	if strings.Contains(body, harness.HookCommand()) {
 		t.Error("uninstall left pawl's hook behind")
 	}
 	if !strings.Contains(body, "somebody-elses-tool") {
@@ -170,7 +170,7 @@ func TestHookIsSilentOutsideAPawlRepo(t *testing.T) {
 	payload := `{"tool_name":"Edit","tool_input":{"file_path":"` +
 		filepath.Join(repo, "src", "auth.py") + `"}}`
 
-	if err := harness.ClaudeCodeHook(strings.NewReader(payload), &out); err != nil {
+	if err := harness.ClaudeCodeHook(harness.Input{Stdin: strings.NewReader(payload)}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if out.String() != "" {
@@ -192,7 +192,7 @@ func TestHookFindsTheRepoFromTheEditedFile(t *testing.T) {
 	var out strings.Builder
 	payload := `{"tool_name":"Edit","tool_input":{"file_path":"` +
 		filepath.Join(repo, "src", "auth.py") + `"}}`
-	if err := harness.ClaudeCodeHook(strings.NewReader(payload), &out); err != nil {
+	if err := harness.ClaudeCodeHook(harness.Input{Stdin: strings.NewReader(payload)}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "unaccounted") {
@@ -213,7 +213,7 @@ func TestHookSurvivesGarbage(t *testing.T) {
 		`{"tool_input":{"file_path":""}}`,
 	} {
 		var out strings.Builder
-		if err := harness.ClaudeCodeHook(strings.NewReader(payload), &out); err != nil {
+		if err := harness.ClaudeCodeHook(harness.Input{Stdin: strings.NewReader(payload)}, &out); err != nil {
 			t.Errorf("payload %q returned an error: %v", payload, err)
 		}
 		if out.String() != "" {
@@ -233,10 +233,134 @@ func TestHookRefusesATerminal(t *testing.T) {
 	// invoked, not about the payload. What is asserted here is the half that is
 	// testable without a pty: a non-terminal stdin must still be read normally.
 	var out strings.Builder
-	if err := harness.ClaudeCodeHook(strings.NewReader(`{}`), &out); err != nil {
+	if err := harness.ClaudeCodeHook(harness.Input{Stdin: strings.NewReader(`{}`)}, &out); err != nil {
 		t.Fatalf("a piped payload must still be handled: %v", err)
 	}
 	if out.String() != "" {
 		t.Errorf("an empty payload should produce nothing, got %q", out.String())
+	}
+}
+
+// TestHookDefaultsToTheWorkingTree is PAWL-019 AC11 and AC12. Running the
+// command bare must do something useful — the first version blocked forever,
+// the second refused outright, and both treated "no input" as an error when it
+// is the case with the most obvious default.
+func TestHookDefaultsToTheWorkingTree(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "gives the repo a .pawl directory",
+		Path: "src/auth.py", StartLine: 1, EndLine: 2,
+	})
+
+	var out strings.Builder
+	err := harness.ClaudeCodeHook(harness.Input{Interactive: true, Repo: repo}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "unaccounted") {
+		t.Errorf("bare invocation should report the working tree, got %q", out.String())
+	}
+}
+
+// TestHookPrefersAnExplicitPath is AC11's ordering: an argument wins over
+// whatever is on stdin.
+func TestHookPrefersAnExplicitPath(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	mustWrite(t, filepath.Join(repo, "src", "other.py"), "x = 1\ny = 2\n")
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "gives the repo a .pawl directory",
+		Path: "src/auth.py", StartLine: 1, EndLine: 2,
+	})
+
+	// stdin names auth.py; the argument names other.py. The argument wins.
+	payload := `{"tool_input":{"file_path":"` + filepath.Join(repo, "src", "auth.py") + `"}}`
+	var out strings.Builder
+	err := harness.ClaudeCodeHook(harness.Input{
+		Path:  filepath.Join(repo, "src", "other.py"),
+		Stdin: strings.NewReader(payload),
+		Repo:  repo,
+	}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "other.py") {
+		t.Errorf("explicit path should win over the payload, got %q", out.String())
+	}
+	if strings.Contains(out.String(), "auth.py") {
+		t.Error("the payload should have been ignored when a path was given")
+	}
+}
+
+// TestNonInteractiveWithNoPayloadStaysSilent is AC13. A pipe with nothing
+// usable on it is a harness call that went wrong, not an invitation to scan the
+// tree on every edit.
+func TestNonInteractiveWithNoPayloadStaysSilent(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "gives the repo a .pawl directory",
+		Path: "src/auth.py", StartLine: 1, EndLine: 2,
+	})
+
+	var out strings.Builder
+	err := harness.ClaudeCodeHook(harness.Input{
+		Stdin: strings.NewReader(``), Interactive: false, Repo: repo,
+	}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "" {
+		t.Errorf("a harness call with no payload must stay silent, got %q", out.String())
+	}
+}
+
+// TestInstalledConfigIsTheEmbeddedOne is AC14 and AC15 — one definition,
+// shipped with the binary that implements it.
+func TestInstalledConfigIsTheEmbeddedOne(t *testing.T) {
+	if harness.HookCommand() == "" {
+		t.Fatal("the marker must be readable from the embedded config, not declared twice")
+	}
+
+	home := t.TempDir()
+	p, err := harness.Install(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(p.Result), harness.HookCommand()) {
+		t.Error("the installed settings do not contain the embedded command")
+	}
+	// What is installed must be exactly what ships, not an assembled copy.
+	if !strings.Contains(string(p.Result), "Edit|Write|MultiEdit") {
+		t.Error("the embedded matcher did not reach the installed settings")
+	}
+}
+
+// TestInstallHonoursAnExplicitDirectory is PAWL-019 AC16. The home default is
+// what makes the hook fire everywhere; --dir is for a team that wants the
+// configuration committed beside their repository instead.
+func TestInstallHonoursAnExplicitDirectory(t *testing.T) {
+	dir := t.TempDir()
+	p, err := harness.Install(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Apply(); err != nil {
+		t.Fatal(err)
+	}
+
+	want := harness.SettingsPath(dir)
+	if p.Path != want {
+		t.Errorf("installed to %s, want %s", p.Path, want)
+	}
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("settings not written to the given directory: %v", err)
+	}
+	// And nothing was written to the real home directory.
+	if home, err := os.UserHomeDir(); err == nil {
+		if strings.HasPrefix(p.Path, home) && !strings.HasPrefix(dir, home) {
+			t.Error("an explicit --dir must not fall back to home")
+		}
 	}
 }
