@@ -14,6 +14,8 @@
 | `pawl sample` | CI, after a gate passes | Selects this changeset for calibration review |
 | `pawl review` | Reviewer, by hand | Two-phase review of a sampled changeset |
 | `pawl calibrate` | Anywhere | Reports the false-clear rate |
+| `pawl setup` | Once, per machine | Installs pawl's hook into your harness settings |
+| `pawl hook` | Called by the harness | Hook entry point; not for interactive use |
 | `pawl version` | Anywhere | Prints version and platform |
 
 `pawl <command> -h` lists the flags for any command.
@@ -139,16 +141,50 @@ Three things distinguish it from `verify`:
 
 ### The Claude Code hook
 
-`hooks/claude-code/pending.sh`, wired in `.claude/settings.json`, runs this after
-every `Edit`, `Write` or `MultiEdit` and reports pending spans back to the agent.
+```bash
+pawl setup claude              # install
+pawl setup claude --dry-run    # show the resulting settings, write nothing
+pawl setup claude --uninstall  # remove pawl's hook, leave everything else
+```
 
-It **informs; it does not enforce**. Enforcement is already the gate's job —
-`max_unclaimed_lines` blocks the merge. What only a hook can do is supply the
+| Flag | Default | Notes |
+|---|---|---|
+| `--dry-run` | off | Print the resulting settings; write nothing |
+| `--uninstall` | off | Remove pawl's hook only |
+
+This writes to `~/.claude/settings.json` — **user-level, not project-level**.
+Project settings load only when that project is the root, so a hook configured
+in one repository is silently absent whenever you work from a parent directory.
+User settings apply everywhere, which is what makes the hook actually fire.
+
+The hook is `pawl hook claude-code`: pawl itself, reading the harness payload on
+stdin. There is no script to install and nothing to go stale when pawl is
+upgraded, and it needs no `jq`, no bash and no interpreter.
+
+Four things it does to your settings, in order:
+
+1. **Merges.** Every key, hook and permission it did not add is preserved.
+2. **Backs up first**, and tells you where.
+3. **Refuses** to touch a settings file it cannot parse, rather than rewriting it.
+4. **Does nothing** on a second run.
+
+It reformats the file, because the JSON is re-encoded — content is preserved,
+key order is not. Check the backup if you want the original layout.
+
+Open `/hooks` once, or restart, for the harness to pick it up.
+
+The hook **informs; it does not enforce**. Enforcement is already the gate's job
+— `max_unclaimed_lines` blocks the merge. What only a hook can do is supply the
 span *at the moment of the edit*, so the answer is evidence rather than a
 reconstruction from a finished diff. That distinction is C-2.
 
-To enable it in a checkout, open `/hooks` once or restart Claude Code — the
-settings watcher only picks up `.claude/` if it existed when the session began.
+It stays silent in any repository with no `.pawl` directory. User settings apply
+to every project, and a repository not using pawl should hear nothing.
+
+**Known gap:** the matcher is `Edit|Write|MultiEdit`. An agent that edits through
+shell commands — `sed`, a heredoc, a script — matches none of them and bypasses
+accounting entirely, with no error. See the open question on
+[`PAWL-019`](../_spec/PAWL-019-harness-installation.md).
 
 ## Where records are stored
 

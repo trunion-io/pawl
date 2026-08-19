@@ -1,0 +1,1 @@
+{"schema_version":"0.1","id":"4b898b7adf7a","ts":"2026-08-19T18:23:57.093356562Z","path":"internal/e2e/harness_test.go","start_line":1,"end_line":30,"fingerprint":"sha256:0d3164af8ab43ad8fb21c5f1a17f0ef34bf71e1b24451ea199b0c432a3c8f8cc","author":{"role":"agent","harness":"claude-code"},"origin":"agent"}

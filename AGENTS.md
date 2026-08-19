@@ -32,14 +32,16 @@ pawl/
 ├── cmd/pawl/              main; the only package that is not internal
 ├── internal/
 │   ├── model/             claim schema, reading list, in-toto statement
-│   ├── claimlog/          append-only JSONL at .pawl/claims.jsonl
+│   ├── claimlog/          write-once records under .pawl/claims and .pawl/acks
 │   ├── gitutil/           subprocess git; no library dependency
 │   ├── anchor/            fingerprint relocation against the delivered tree
 │   ├── evidence/          junit, cobertura, typecheck, policy, spec ingest
 │   ├── resolve/           the product: claims + evidence -> reading list
 │   ├── policy/            policy pack v0 and a TOML subset reader
 │   ├── attest/            in-toto Statement builder
-│   ├── cli/               the four commands
+│   ├── harness/           harness hook adapters and settings install
+│   ├── calibrate/         sampling, two-phase review, false-clear rate
+│   ├── cli/               the commands
 │   └── e2e/               end-to-end against real git repos
 ├── examples/              policy.toml, pawl-gate.yml
 └── _spec/                 specs, in the format the spec tool will use
@@ -193,15 +195,14 @@ to pawl:
   span. Until it does, the ~85% unclaimed rate measured on this repo stands, and
   `max_unclaimed_lines = 0` keeps pressuring agents to backfill against a
   finished diff, which is the failure C-2 forbids.
-- **The PAWL-016 hook does not load, and nothing said so.** Its config sits in
-  `<repo>/.claude/settings.json`, which Claude Code reads only when that repo is
-  the project root — working on pawl from a parent directory gets no hook at all,
-  silently. Verified: a `Write` produced no injected context while the script
-  produced the right output by hand. PAWL-019 specs the fix.
 - **An agent editing through shell bypasses accounting entirely.** The matcher is
   `Edit|Write|MultiEdit`; `sed`, heredocs and scripts match none of them, so no
   prompt fires and the gap only surfaces at PR time — the C-2 backfill situation
-  the hook exists to prevent. Open question on PAWL-019.
+  the hook exists to prevent. Adding `Bash` is not a fix on its own: the payload
+  carries a command rather than a file path, so the hook would have nothing to
+  report on. **Open question on PAWL-019, and it applies to this repository right
+  now** — much of the recent work was done through shell edits and is unaccounted
+  for as a result.
 - **The `spec:` evidence type cannot resolve, and citing it makes a claim
   permanently unverified.** It requires a signed spec attestation, which
   requires the spec tool — PAWL-009, drafted and not built. Found by dogfooding

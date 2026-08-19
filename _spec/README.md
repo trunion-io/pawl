@@ -100,7 +100,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-016-edit-time-accounting-hook.md` | **built** — `pawl pending` + Claude Code hook · implements PAWL-008 AC1 |
 | `PAWL-017-deterministic-accounting.md` | **AC1–AC12, AC14, AC16–AC18 built**; AC13 (turn-end deferral) needs a Stop hook |
 | `PAWL-018-record-storage.md` | **built** · extends PAWL-001 · **granularity provisional** |
-| `PAWL-019-harness-installation.md` | **drafted, not built — next** · the PAWL-016 hook does not load |
+| `PAWL-019-harness-installation.md` | **built** · `pawl setup claude`, `pawl hook claude-code` · **open question: the Bash matcher** |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.

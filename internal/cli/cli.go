@@ -37,6 +37,7 @@ import (
 	"trunion.io/pawl/internal/claimlog"
 	"trunion.io/pawl/internal/evidence"
 	"trunion.io/pawl/internal/gitutil"
+	"trunion.io/pawl/internal/harness"
 	"trunion.io/pawl/internal/model"
 	"trunion.io/pawl/internal/policy"
 	"trunion.io/pawl/internal/resolve"
@@ -54,6 +55,8 @@ Commands:
   sample   Select this changeset for calibration review, at the configured rate.
   review   Review a sampled changeset. Two phases: verdict, then cause.
   calibrate  Report the false-clear rate over reviewed samples.
+  setup    Install pawl's hook into your harness settings.
+  hook     Harness hook entry point. Not for interactive use.
   verify   Resolve claims against evidence and print the reading list.
   attest   Emit the in-toto Statement. Sign it with ` + "`cosign attest-blob`" + `.
   gate     Evaluate the policy pack. Exit 1 on violation.
@@ -118,6 +121,10 @@ func Run(args []string, version string) int {
 		return cmdReview(args[1:])
 	case "calibrate":
 		return cmdCalibrate(args[1:])
+	case "setup":
+		return cmdSetup(args[1:])
+	case "hook":
+		return cmdHook(args[1:])
 	case "verify":
 		return cmdVerify(args[1:])
 	case "attest":
@@ -180,17 +187,17 @@ func parseEvidenceRefs(values []string) ([]model.EvidenceRef, error) {
 func cmdClaim(args []string) int {
 	fs := flag.NewFlagSet("claim", flag.ContinueOnError)
 	var (
-		path       = fs.String("path", "", "File the claim is about.")
-		lines      = fs.String("lines", "", "Line range, e.g. 40-58.")
-		kind       = fs.String("kind", string(model.KindAssumption), "Claim kind.")
-		role       = fs.String("role", string(model.RoleAgent), "Author role.")
-		harness    = fs.String("harness", "", "e.g. claude-code")
-		modelName  = fs.String("model", "", "Model identifier.")
-		identity   = fs.String("identity", "", "Human identity for expert/client roles.")
-		session    = fs.String("session", "", "Session identifier.")
-		ticket     = fs.String("ticket", "", "e.g. PROJ-1234")
-		repo       = fs.String("repo", ".", "Repository root.")
-		verifiedBy stringSlice
+		path        = fs.String("path", "", "File the claim is about.")
+		lines       = fs.String("lines", "", "Line range, e.g. 40-58.")
+		kind        = fs.String("kind", string(model.KindAssumption), "Claim kind.")
+		role        = fs.String("role", string(model.RoleAgent), "Author role.")
+		harnessFlag = fs.String("harness", "", "e.g. claude-code")
+		modelName   = fs.String("model", "", "Model identifier.")
+		identity    = fs.String("identity", "", "Human identity for expert/client roles.")
+		session     = fs.String("session", "", "Session identifier.")
+		ticket      = fs.String("ticket", "", "e.g. PROJ-1234")
+		repo        = fs.String("repo", ".", "Repository root.")
+		verifiedBy  stringSlice
 	)
 	fs.Var(&verifiedBy, "verified-by", "type:ref, repeatable.")
 	fs.Usage = func() {
@@ -251,7 +258,7 @@ func cmdClaim(args []string) int {
 		VerifiedBy: refs,
 		Author: &model.Author{
 			Role:     authorRole,
-			Harness:  *harness,
+			Harness:  *harnessFlag,
 			Model:    *modelName,
 			Identity: *identity,
 		},
@@ -271,16 +278,16 @@ func cmdClaim(args []string) int {
 func cmdAck(args []string) int {
 	fs := flag.NewFlagSet("ack", flag.ContinueOnError)
 	var (
-		path     = fs.String("path", "", "File the acknowledgement is about.")
-		lines    = fs.String("lines", "", "Line range, e.g. 40-58.")
-		role     = fs.String("role", string(model.RoleAgent), "Author role.")
-		harness  = fs.String("harness", "", "e.g. claude-code")
-		modelStr = fs.String("model", "", "Model identifier.")
-		identity = fs.String("identity", "", "Human identity for expert/client roles.")
-		session  = fs.String("session", "", "Session identifier.")
-		repo     = fs.String("repo", ".", "Repository root.")
-		auto     = fs.Bool("auto", false, "Apply deterministic rules from .pawl/policy.toml instead of taking --path/--lines.")
-		dryRun   = fs.Bool("dry-run", false, "With --auto: report what the rules match, record nothing.")
+		path        = fs.String("path", "", "File the acknowledgement is about.")
+		lines       = fs.String("lines", "", "Line range, e.g. 40-58.")
+		role        = fs.String("role", string(model.RoleAgent), "Author role.")
+		harnessFlag = fs.String("harness", "", "e.g. claude-code")
+		modelStr    = fs.String("model", "", "Model identifier.")
+		identity    = fs.String("identity", "", "Human identity for expert/client roles.")
+		session     = fs.String("session", "", "Session identifier.")
+		repo        = fs.String("repo", ".", "Repository root.")
+		auto        = fs.Bool("auto", false, "Apply deterministic rules from .pawl/policy.toml instead of taking --path/--lines.")
+		dryRun      = fs.Bool("dry-run", false, "With --auto: report what the rules match, record nothing.")
 	)
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "usage: pawl ack --path <file> --lines <a-b> [options]")
@@ -294,7 +301,7 @@ func cmdAck(args []string) int {
 		return 2
 	}
 	if *auto {
-		return cmdAckAuto(*repo, *dryRun, *harness, *modelStr, *session)
+		return cmdAckAuto(*repo, *dryRun, *harnessFlag, *modelStr, *session)
 	}
 	if *path == "" || *lines == "" {
 		fs.Usage()
@@ -315,7 +322,7 @@ func cmdAck(args []string) int {
 		EndLine:   end,
 		Author: &model.Author{
 			Role:     authorRole,
-			Harness:  *harness,
+			Harness:  *harnessFlag,
 			Model:    *modelStr,
 			Identity: *identity,
 		},
@@ -812,6 +819,88 @@ func sortedKeysInt(m map[string]int) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// cmdHook is the harness entry point (PAWL-019). Never fails the edit loop.
+func cmdHook(args []string) int {
+	harnessName, _ := takeLeadingPositional(args)
+	switch harnessName {
+	case "claude-code":
+		_ = harness.ClaudeCodeHook(os.Stdin, os.Stdout)
+		return 0
+	case "":
+		fmt.Fprintln(os.Stderr, "usage: pawl hook claude-code")
+		return 2
+	default:
+		fmt.Fprintf(os.Stderr, "unknown harness %q; known: claude-code\n", harnessName)
+		return 2
+	}
+}
+
+// cmdSetup installs the hook into the user's harness settings (AC1-AC6).
+func cmdSetup(args []string) int {
+	harnessName, args := takeLeadingPositional(args)
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	dryRun := fs.Bool("dry-run", false, "Show the resulting settings; write nothing.")
+	uninstall := fs.Bool("uninstall", false, "Remove pawl's hook, leaving everything else.")
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "usage: pawl setup claude [--dry-run] [--uninstall]")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if harnessName != "claude" && harnessName != "claude-code" {
+		fs.Usage()
+		return 2
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fail(err)
+	}
+
+	var p harness.Plan
+	if *uninstall {
+		p, err = harness.Uninstall(home)
+	} else {
+		p, err = harness.Install(home)
+	}
+	if err != nil {
+		return fail(err)
+	}
+
+	if p.AlreadySet {
+		if *uninstall {
+			fmt.Printf("pawl's hook is not in %s; nothing to remove\n", p.Path)
+		} else {
+			fmt.Printf("already installed in %s\n", p.Path)
+		}
+		return 0
+	}
+
+	if *dryRun {
+		fmt.Printf("would write %s:\n\n%s\n", p.Path, p.Result)
+		return 0
+	}
+	if err := p.Apply(); err != nil {
+		return fail(err)
+	}
+
+	if *uninstall {
+		fmt.Printf("removed pawl's hook from %s\n", p.Path)
+	} else {
+		fmt.Printf("installed pawl's hook in %s\n", p.Path)
+	}
+	if p.Backup != "" {
+		fmt.Printf("previous settings backed up to %s\n", p.Backup)
+	}
+	if !*uninstall {
+		fmt.Println()
+		fmt.Println("Open /hooks once, or restart, for the harness to pick it up.")
+		fmt.Println("It stays silent in repositories that have no .pawl directory.")
+	}
+	return 0
 }
 
 func parseLineRange(s string) (int, int, error) {
