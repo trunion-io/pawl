@@ -214,10 +214,6 @@ to pawl:
   command reuses existing flag names — `pawl ack` was added and slipped through
   undetected. Any implementation of AC3 in `make check` must compare the command
   set as well as the flag set.
-- **The CLI itself is untested.** The e2e suite calls the packages directly and
-  never invokes `cmd/pawl`. A flag-parsing bug that made `pawl claim` a no-op
-  shipped past all ten tests and was caught by hand. Same hole existed in the
-  Python suite.
 - Concurrent claim writes rely on `O_APPEND` atomicity and are untested.
 - Relocation is O(file length) per claim; wrong for a monorepo-wide sweep.
 - Renames show as drift. Intended, but noisy on large refactors.
