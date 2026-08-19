@@ -364,3 +364,120 @@ func TestInstallHonoursAnExplicitDirectory(t *testing.T) {
 		}
 	}
 }
+
+// TestTurnEndCatchesAShellEdit is PAWL-020 AC1 and AC2, and the gap the spec
+// exists for: nothing here goes through an edit tool.
+func TestTurnEndCatchesAShellEdit(t *testing.T) {
+	repo := newRepo(t)
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "gives the repo a .pawl directory",
+		Path: "src/auth.py", StartLine: 1, EndLine: 2,
+	})
+	// A change made the way a shell would make it — no file_path, no payload,
+	// no edit-tool event anywhere.
+	writeFeature(t, repo)
+
+	var out strings.Builder
+	if err := harness.ClaudeCodeTurnEnd(repo, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "unaccounted") {
+		t.Fatalf("a shell edit must still be caught at the turn boundary, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "block") {
+		t.Error("the reply should feed the reason back to the agent")
+	}
+}
+
+// TestTurnEndRaisesTheSameSetOnlyOnce is AC5 — the criterion that keeps this
+// from trapping an agent in a loop it cannot escape.
+func TestTurnEndRaisesTheSameSetOnlyOnce(t *testing.T) {
+	repo := newRepo(t)
+	record(t, repo, claimlog.Options{
+		Kind: model.KindAssumption, Text: "gives the repo a .pawl directory",
+		Path: "src/auth.py", StartLine: 1, EndLine: 2,
+	})
+	writeFeature(t, repo)
+
+	var first, second strings.Builder
+	if err := harness.ClaudeCodeTurnEnd(repo, &first); err != nil {
+		t.Fatal(err)
+	}
+	if first.String() == "" {
+		t.Fatal("the first turn boundary should raise the outstanding set")
+	}
+	if err := harness.ClaudeCodeTurnEnd(repo, &second); err != nil {
+		t.Fatal(err)
+	}
+	if second.String() != "" {
+		t.Errorf("the same set must not be raised twice; a turn that cannot end "+
+			"is a loop. got %q", second.String())
+	}
+}
+
+// TestTurnEndIsSilentWhenEverythingIsAccounted is AC4. Most turns will be
+// silent, and a hook that speaks regardless is one an agent learns to ignore.
+func TestTurnEndIsSilentWhenEverythingIsAccounted(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	// Account for the whole change.
+	ack(t, repo, claimlog.AckOptions{Path: "src/auth.py", StartLine: 1, EndLine: 9})
+
+	var out strings.Builder
+	if err := harness.ClaudeCodeTurnEnd(repo, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "" {
+		t.Errorf("nothing outstanding should mean nothing said, got %q", out.String())
+	}
+}
+
+// TestTurnEndIsSilentOutsideAPawlRepo — user settings apply to every project.
+func TestTurnEndIsSilentOutsideAPawlRepo(t *testing.T) {
+	repo := newRepo(t) // no .pawl directory
+	writeFeature(t, repo)
+	var out strings.Builder
+	if err := harness.ClaudeCodeTurnEnd(repo, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "" {
+		t.Errorf("spoke in a repo not using pawl: %q", out.String())
+	}
+}
+
+// TestSetupInstallsBothBindings is AC3 and AC6: the turn boundary is primary,
+// the per-edit binding supplements it and is the fallback if the turn event
+// proves unreliable.
+func TestSetupInstallsBothBindings(t *testing.T) {
+	home := t.TempDir()
+	p, err := harness.Install(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(p.Result)
+	for _, want := range []string{"Stop", "PostToolUse", "--event stop", "Edit|Write|MultiEdit"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("installed settings missing %q", want)
+		}
+	}
+}
+
+// TestUninstallRemovesBothBindings — an uninstall that leaves one behind is
+// worse than one that fails loudly.
+func TestUninstallRemovesBothBindings(t *testing.T) {
+	home := t.TempDir()
+	p, _ := harness.Install(home)
+	if err := p.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	u, err := harness.Uninstall(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(u.Result), "pawl hook") {
+		t.Errorf("uninstall left a binding behind: %s", u.Result)
+	}
+}

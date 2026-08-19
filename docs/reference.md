@@ -152,6 +152,28 @@ pawl setup claude --uninstall  # remove pawl's hook, leave everything else
 | `--dry-run` | off | Print the resulting settings; write nothing |
 | `--uninstall` | off | Remove pawl's hook only |
 
+It installs **two bindings**:
+
+| Event | Fires | Reports |
+|---|---|---|
+| `Stop` | End of a turn | The whole working tree |
+| `PostToolUse` | After `Edit`/`Write`/`MultiEdit` | Just the edited file |
+
+The turn boundary is the one that matters. Binding only to edit tools means an
+agent changing files through the shell — `sed -i`, a heredoc, `>` redirection —
+matches nothing and is never asked to account for it, and the omission surfaces
+only when the gate blocks at PR time. Every binding to a tool name is a list of
+ways to edit a file, and that list is never finished; a turn boundary cannot be
+incomplete in that way.
+
+The per-edit binding stays because immediacy is worth having where a tool offers
+it, and because it is the fallback if the turn event proves unreliable.
+
+At a turn boundary, the same outstanding set is raised **once**. A hook that
+keeps refusing to let a turn end is one edit from a loop an agent cannot escape,
+so the worst case is one extra exchange. Turns where everything is accounted for
+produce nothing at all.
+
 By default this writes to `~/.claude/settings.json` — **user-level, not
 project-level**. Use `--dir <path>` to install into a specific directory
 instead, which is how you get the configuration committed beside a repository if

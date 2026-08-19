@@ -98,10 +98,10 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-014-escalation-precision.md` | drafted, not built · mirrors PAWL-007 |
 | `PAWL-015-decision-capture.md` | drafted, not built · took AC3 from PAWL-008 |
 | `PAWL-016-edit-time-accounting-hook.md` | **built** — `pawl pending` + Claude Code hook · implements PAWL-008 AC1 |
-| `PAWL-017-deterministic-accounting.md` | **AC1–AC12, AC14, AC16–AC18 built**; AC13 (turn-end deferral) needs a Stop hook |
+| `PAWL-017-deterministic-accounting.md` | **built** — AC13 delivered by PAWL-020 |
 | `PAWL-018-record-storage.md` | **built** · extends PAWL-001 · **granularity provisional** |
 | `PAWL-019-harness-installation.md` | **built** · `pawl setup claude`, `pawl hook claude-code` · Bash gap moved to PAWL-020 |
-| `PAWL-020-turn-boundary-accounting.md` | **drafted, not built — next** · resolves the PAWL-019 Bash gap |
+| `PAWL-020-turn-boundary-accounting.md` | **built** · turn-boundary binding · **AC1 needs live verification** |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.

@@ -15,7 +15,7 @@ holds only what is specific to working in pawl.
 cd pawl && make check
 ```
 
-`make check` is fmt + vet + the e2e suite: 33 tests, all must pass before and
+`make check` is fmt + vet + the e2e suite: 59 tests, all must pass before and
 after any change. If they don't pass on a clean checkout, fix that before
 anything else — do not work around it.
 

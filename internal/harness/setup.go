@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -29,36 +31,51 @@ import (
 //go:embed claude-code.json
 var claudeCodeConfig []byte
 
-// HookCommand identifies pawl's entry in a settings file, and is read out of
-// the embedded configuration rather than declared again (AC15).
+// commandPrefix identifies pawl's entries, and is read out of the embedded
+// configuration rather than declared again (AC15).
 //
-// A separately declared constant would be a second source of truth for "which
-// entry is ours", and the failure when the two disagree is an uninstall that
-// silently leaves the hook in place.
+// A prefix rather than an exact string, because pawl now installs more than one
+// entry — a per-edit binding and a turn-boundary one — and both must be found
+// by uninstall. A separately declared constant would be a second source of truth
+// for "which entry is ours", and the failure when the two disagree is an
+// uninstall that silently leaves a hook in place.
+const commandPrefix = "pawl hook "
+
+// HookCommand reports the first command pawl installs, for callers that want to
+// name it. Uninstall matches on the prefix instead.
 func HookCommand() string {
-	group, err := configGroup()
+	cfg, err := config()
 	if err != nil {
 		return ""
 	}
-	inner, _ := group["hooks"].([]any)
-	for _, h := range inner {
-		if entry, ok := h.(map[string]any); ok {
-			if cmd, ok := entry["command"].(string); ok {
-				return cmd
+	for _, groups := range cfg {
+		for _, g := range groups {
+			for _, h := range g["hooks"].([]any) {
+				if entry, ok := h.(map[string]any); ok {
+					if cmd, ok := entry["command"].(string); ok {
+						return cmd
+					}
+				}
 			}
 		}
 	}
 	return ""
 }
 
-// configGroup decodes the embedded configuration. A fresh copy each call, so a
-// caller mutating what it merges cannot corrupt the definition for the next one.
-func configGroup() (map[string]any, error) {
-	var g map[string]any
-	if err := json.Unmarshal(claudeCodeConfig, &g); err != nil {
+func isOurs(entry map[string]any) bool {
+	cmd, _ := entry["command"].(string)
+	return strings.HasPrefix(cmd, commandPrefix)
+}
+
+// config decodes the embedded configuration as event name -> groups. A fresh
+// copy each call, so a caller mutating what it merges cannot corrupt the
+// definition for the next one.
+func config() (map[string][]map[string]any, error) {
+	var raw map[string][]map[string]any
+	if err := json.Unmarshal(claudeCodeConfig, &raw); err != nil {
 		return nil, fmt.Errorf("embedded harness config is not valid JSON: %w", err)
 	}
-	return g, nil
+	return raw, nil
 }
 
 // SettingsPath is where Claude Code keeps user-level settings. User level is
@@ -125,12 +142,8 @@ func plan(home string, add bool) (Plan, error) {
 // decoding into a struct would silently drop every key pawl does not know
 // about, which is precisely what AC2 forbids.
 func mutate(settings map[string]any, add bool) bool {
-	group, err := configGroup()
+	cfg, err := config()
 	if err != nil {
-		return false
-	}
-	marker := HookCommand()
-	if marker == "" {
 		return false
 	}
 
@@ -143,47 +156,87 @@ func mutate(settings map[string]any, add bool) bool {
 		settings["hooks"] = hooks
 	}
 
-	events, _ := hooks["PostToolUse"].([]any)
+	// Deterministic order so a dry run shows the same thing twice.
+	eventNames := make([]string, 0, len(cfg))
+	for name := range cfg {
+		eventNames = append(eventNames, name)
+	}
+	sort.Strings(eventNames)
 
-	// Find our entry, if it is already there.
-	for gi, g := range events {
+	changed := false
+	for _, event := range eventNames {
+		if mutateEvent(hooks, event, cfg[event], add) {
+			changed = true
+		}
+	}
+
+	// Leave nothing behind that we created and then emptied.
+	if !add && len(hooks) == 0 {
+		delete(settings, "hooks")
+	}
+	return changed
+}
+
+// mutateEvent adds or removes pawl's groups for one event, leaving every other
+// tool's entries exactly as they were.
+func mutateEvent(hooks map[string]any, event string, ours []map[string]any, add bool) bool {
+	existing, _ := hooks[event].([]any)
+
+	if !add {
+		kept := make([]any, 0, len(existing))
+		removed := false
+		for _, g := range existing {
+			group, _ := g.(map[string]any)
+			if group == nil {
+				kept = append(kept, g)
+				continue
+			}
+			inner, _ := group["hooks"].([]any)
+			survivors := make([]any, 0, len(inner))
+			for _, h := range inner {
+				entry, _ := h.(map[string]any)
+				if entry != nil && isOurs(entry) {
+					removed = true
+					continue
+				}
+				survivors = append(survivors, h)
+			}
+			// A group that held only our hook goes; one that held somebody
+			// else's keeps it.
+			if len(survivors) == 0 && len(inner) > 0 {
+				continue
+			}
+			group["hooks"] = survivors
+			kept = append(kept, group)
+		}
+		if !removed {
+			return false
+		}
+		if len(kept) > 0 {
+			hooks[event] = kept
+		} else {
+			delete(hooks, event)
+		}
+		return true
+	}
+
+	// Already installed? AC3: a second run is a no-op.
+	for _, g := range existing {
 		group, _ := g.(map[string]any)
 		if group == nil {
 			continue
 		}
-		inner, _ := group["hooks"].([]any)
-		for hi, h := range inner {
-			entry, _ := h.(map[string]any)
-			if entry == nil || entry["command"] != marker {
-				continue
+		for _, h := range group["hooks"].([]any) {
+			if entry, ok := h.(map[string]any); ok && isOurs(entry) {
+				return false
 			}
-			if add {
-				return false // AC3: already installed, second run is a no-op
-			}
-			// AC6: remove ours, and only ours. Groups and arrays that still
-			// hold somebody else's hooks are left exactly as they were.
-			inner = append(inner[:hi], inner[hi+1:]...)
-			if len(inner) > 0 {
-				group["hooks"] = inner
-				return true
-			}
-			events = append(events[:gi], events[gi+1:]...)
-			if len(events) > 0 {
-				hooks["PostToolUse"] = events
-			} else {
-				delete(hooks, "PostToolUse")
-				if len(hooks) == 0 {
-					delete(settings, "hooks")
-				}
-			}
-			return true
 		}
 	}
 
-	if !add {
-		return false
+	for _, g := range ours {
+		existing = append(existing, g)
 	}
-	hooks["PostToolUse"] = append(events, group)
+	hooks[event] = existing
 	return true
 }
 

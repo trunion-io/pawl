@@ -830,6 +830,7 @@ func cmdHook(args []string) int {
 
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
 	repo := fs.String("repo", ".", "Repository root, when falling back to the working tree.")
+	event := fs.String("event", "", "Harness event. Empty is a per-edit call; `stop` is a turn boundary.")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "usage: pawl hook claude-code [<file>]")
 		fmt.Fprintln(fs.Output(), "\nHarness integration point. Install it with: pawl setup claude")
@@ -844,6 +845,13 @@ func cmdHook(args []string) int {
 	if harnessName != "claude-code" {
 		fs.Usage()
 		return 2
+	}
+
+	// The turn boundary does not read a payload at all — whatever changed the
+	// tree, and by whatever route, it has changed by now (PAWL-020 AC1, AC2).
+	if *event == "stop" {
+		_ = harness.ClaudeCodeTurnEnd(*repo, os.Stdout)
+		return 0
 	}
 
 	// A terminal on stdin means a person ran this. Reading it would block

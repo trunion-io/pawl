@@ -213,3 +213,74 @@ func repoOf(path string) (string, bool) {
 		dir = parent
 	}
 }
+
+// stopReply is the Stop-event response shape. `block` feeds the reason back and
+// lets the turn continue, which is how the agent is told there is accounting
+// outstanding while it still holds the reasoning.
+type stopReply struct {
+	Decision string `json:"decision,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+}
+
+// ClaudeCodeTurnEnd reports unaccounted spans at a turn boundary (PAWL-020).
+//
+// This is the binding that does not depend on which tool made the change. An
+// agent editing through the shell matches no edit-tool matcher, and every
+// binding to a tool name is a list of ways to edit a file that is never
+// finished. By the time a turn ends the tree has changed, whatever route the
+// change took.
+//
+// AC5 is the safety argument and it rests on the surfacing cache: a turn-
+// boundary hook that keeps refusing to let a turn end is one edit away from a
+// loop an agent cannot escape. The same unaccounted set is raised once and then
+// never again, so the worst case is one extra exchange, not a trap.
+func ClaudeCodeTurnEnd(repo string, w io.Writer) error {
+	if repo == "" {
+		repo = "."
+	}
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		return nil
+	}
+	root, ok := repoOf(filepath.Join(abs, "x"))
+	if !ok {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(root, ".pawl")); err != nil {
+		return nil
+	}
+
+	claims, err := claimlog.Load(root)
+	if err != nil {
+		return nil
+	}
+	acks, err := claimlog.LoadAcks(root)
+	if err != nil {
+		return nil
+	}
+	spans, err := resolve.Pending(root, claims, acks, nil)
+	if err != nil {
+		return nil
+	}
+
+	// AC4: most turns account for everything, and a hook that speaks every turn
+	// regardless is one an agent learns to ignore.
+	if len(spans) == 0 {
+		return nil
+	}
+
+	// AC5: raised once per unchanged set. The cache is the loop guard.
+	const turnKey = "\x00turn"
+	if resolve.AlreadyRaised(root, turnKey, spans) {
+		return nil
+	}
+	resolve.MarkRaised(root, turnKey, spans)
+
+	var reply stopReply
+	reply.Decision = "block"
+	reply.Reason = message("the working tree", spans) +
+		"\n\nRecord these before finishing — `pawl claim` for anything you assumed, " +
+		"`pawl ack` where there was nothing to assume. Doing it now keeps the " +
+		"reasoning attached to the change; doing it later is reconstruction."
+	return json.NewEncoder(w).Encode(reply)
+}

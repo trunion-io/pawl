@@ -57,6 +57,16 @@ func cacheKey(repo, file string) string {
 	return filepath.Join(cacheDir(repo), hex.EncodeToString(sum[:])[:16])
 }
 
+// AlreadyRaised and MarkRaised are the same mechanism under a name that reads
+// correctly for the turn-boundary caller, which raises a set rather than
+// surfacing a file (PAWL-020 AC5). Sharing the implementation is deliberate:
+// two loop guards that could disagree is one more than is safe.
+func AlreadyRaised(repo, key string, spans []PendingSpan) bool {
+	return AlreadySurfaced(repo, key, spans)
+}
+
+func MarkRaised(repo, key string, spans []PendingSpan) { MarkSurfaced(repo, key, spans) }
+
 // AlreadySurfaced reports whether this exact pending set was the last thing
 // surfaced for this file.
 //

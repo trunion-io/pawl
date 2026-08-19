@@ -55,7 +55,7 @@ Run from this directory. [`.envrc`](./.envrc) puts `./bin` on PATH, so once
 you have built, `pawl` means this build.
 
 ```bash
-make test                           # 33 e2e tests, all must pass
+make test                           # 59 e2e tests, all must pass
 make build                          # ./bin/pawl
 make dist                           # 5 platforms + SHA256SUMS
 make check                          # fmt + vet + test, what CI runs
@@ -195,14 +195,12 @@ to pawl:
   span. Until it does, the ~85% unclaimed rate measured on this repo stands, and
   `max_unclaimed_lines = 0` keeps pressuring agents to backfill against a
   finished diff, which is the failure C-2 forbids.
-- **An agent editing through shell bypasses accounting entirely.** The matcher is
-  `Edit|Write|MultiEdit`; `sed`, heredocs and scripts match none of them, so no
-  prompt fires and the gap only surfaces at PR time — the C-2 backfill situation
-  the hook exists to prevent. Adding `Bash` is not a fix on its own: the payload
-  carries a command rather than a file path, so the hook would have nothing to
-  report on. **Open question on PAWL-019, and it applies to this repository right
-  now** — much of the recent work was done through shell edits and is unaccounted
-  for as a result.
+- **The turn-boundary binding is built but unverified in a live session.** PAWL-020
+  closes the shell-edit gap by binding to the end of a turn rather than to a list
+  of editing tools, and every criterion is tested — but whether the harness's
+  Stop event actually fires, and puts its reason where an agent acts on it, is an
+  assumption about somebody else's product. Confirm by observation before
+  relying on it; PAWL-020 AC6 keeps the per-edit binding as the fallback.
 - **The `spec:` evidence type cannot resolve, and citing it makes a claim
   permanently unverified.** It requires a signed spec attestation, which
   requires the spec tool — PAWL-009, drafted and not built. Found by dogfooding
