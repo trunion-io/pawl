@@ -53,7 +53,7 @@ Run from this directory. [`.envrc`](./.envrc) puts `./bin` on PATH, so once
 you have built, `pawl` means this build.
 
 ```bash
-make test                           # 10 e2e tests, all must pass
+make test                           # 13 e2e tests, all must pass
 make build                          # ./bin/pawl
 make dist                           # 5 platforms + SHA256SUMS
 make check                          # fmt + vet + test, what CI runs
@@ -128,7 +128,9 @@ Phase 1 (build the kit) — **items 1–5 DONE**
 3. ✅ Assembler + verifier — `internal/anchor`, `internal/evidence`, `internal/resolve`
 4. ✅ Policy pack v0 — `internal/policy`, `examples/policy.toml`
 5. ✅ CI check + annotations — `examples/pawl-gate.yml`, `verify --annotations`
-6. ⬜ **Calibration sampler — NEXT. Blocked on an open decision, see PAWL-007**
+6. ⬜ **Calibration sampler — NEXT, and now unblocked.** The verdict taxonomy is
+   settled: two axes, a binary `correct`/`false_clear` per span and a cause per
+   (span, claim) pair. See PAWL-007. Escalation precision split out to PAWL-014.
 
 Phase 2 (prove it)
 
@@ -146,11 +148,6 @@ phases (3, and the commercial half of 4) are tracked in
 [the repository AGENTS.md](../AGENTS.md).
 
 ## Open decisions blocking work
-
-**PAWL-007 verdict taxonomy.** The calibration sampler's per-span verdicts
-cannot be retrofitted onto data already collected. Current proposal is
-`faithful` / `wrong` / `immaterial` / `irrelevant`; the last two are doing
-suspicious work. **Do not start coding the sampler until Rich settles this.**
 
 **PAWL-008 prompted vs enforced claiming.** Prompted produces gaps, enforced
 produces noise. Now cheaper to decide either way: `pawl claim` starts in ~2.5ms,

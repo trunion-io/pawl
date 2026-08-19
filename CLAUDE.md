@@ -25,11 +25,12 @@ directory.
 
 ## Where to start
 
-The next unit of work is **PAWL-007, the calibration sampler**, and it is
-**blocked on a decision Rich has not made** (the per-span verdict taxonomy).
-Do not start coding it. If asked to work on it, surface the open decision first.
+The next unit of work is **PAWL-007, the calibration sampler**. The verdict
+taxonomy that was blocking it is **settled** — two axes, binary verdict per span
+plus a cause per (span, claim) pair — so it is ready to build. It is the largest
+item on this list and the only one on the critical path to the demo.
 
-Unblocked work, in rough order of value:
+Other unblocked work, in rough order of value:
 
 1. **Test the CLI.** The e2e suite drives the packages directly and never
    invokes `cmd/pawl`. A flag-parsing bug that made `pawl claim` a silent no-op

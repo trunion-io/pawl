@@ -88,13 +88,14 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-004-reading-list.md` | delivered |
 | `PAWL-005-attestation.md` | delivered |
 | `PAWL-006-policy-gate.md` | delivered |
-| `PAWL-007-calibration-sampler.md` | **drafted, not built — next** |
+| `PAWL-007-calibration-sampler.md` | **drafted, not built — next.** Taxonomy settled |
 | `PAWL-008-harness-hooks.md` | drafted, not built |
 | `PAWL-009-spec-tool.md` | drafted, not built |
 | `PAWL-010-documentation.md` | drafted · **written after the docs it specifies** |
-| `PAWL-011-tool-provenance.md` | drafted, not built · extends PAWL-005 |
+| `PAWL-011-tool-provenance.md` | extends PAWL-005 · **AC1–AC6, AC9 built**; AC7–AC8 await the release workflow |
 | `PAWL-012-configuration.md` | drafted, not built · extends PAWL-006 |
 | `PAWL-013-versioning-and-release.md` | drafted, not built · **open decision: supported versions** |
+| `PAWL-014-escalation-precision.md` | drafted, not built · mirrors PAWL-007 |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.
