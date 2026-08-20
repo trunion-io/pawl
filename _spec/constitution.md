@@ -129,3 +129,115 @@ auditing itself, blank-line noise — lived in the seam between git's behaviour
 and our model of it. A mock would have hidden all three.
 
 **checkable:** partially — enforced by review.
+
+## C-10 — Mechanical resolution and sample verdict are distinct axes
+
+The system shall represent the mechanical resolution of a changed span and the
+calibration sample verdict of that span as two separate fields, neither derived
+from the other, and shall carry both through persistence. The sample verdict is
+optional: a span not yet reviewed has none.
+
+**checkable:** yes — `trunion.io/pawl/internal/e2e.TestSamplingLeavesTheSampleVerdictUnsetAndTheMechanicalVerdictIntact`,
+`trunion.io/pawl/internal/e2e.TestRecordingAReviewDoesNotOverwriteTheMechanicalVerdict`
+and `trunion.io/pawl/internal/e2e.TestBothAxesSurviveTheRoundTripThroughDisk`
+
+> An earlier draft said "the lifecycle state of a claim", made the rule
+> `checkable: yes` with no test named, and then `partially` with no check at all.
+> All of those were wrong. `Claim` has no lifecycle-state field and gains none — `contradicted` is a
+> kind (PAWL-033) — so the rule would have bound something that does not exist,
+> and this file's own convention is that `checkable: yes` names the test, as C-1,
+> C-3 and C-4 all do.
+>
+> Restated over what is already there: `SampledSpan.Verdict` carries the
+> mechanical resolution and `SampledSpan.Reviewed` the sample verdict. The rule is
+> that those must not collapse, and the named tests hold it — a cleared span
+> reviewed as a false clear must keep both values, which is the disagreement the
+> false-clear rate is built from and which a single field could not express.
+>
+> The tests drive `calibrate.FromReadingList` and `Sample.RecordVerdict`, which
+> are the two production paths that write these fields and therefore the two
+> places a collapse would appear. A first version asserted over a `SampledSpan`
+> literal instead; it passed whatever those functions did, including deriving one
+> field from the other, and was replaced after review caught it. Both mutations
+> were run against the replacement and both fail it.
+>
+> A third test covers persistence, which the other two cannot see. `calibrate.Save`
+> and `LoadAll` are how the corpus survives an engagement, and the pre-existing
+> round-trip test asserts the id, tool version and policy snapshot without ever
+> asserting a verdict — so `json:"-"` on `SampledSpan.Reviewed` would drop every
+> human verdict ever recorded while passing both in-memory tests *and* that one.
+> Review named the mutation; it was run, it passes all three older tests, and only
+> the round-trip test catches it. A corpus is what is on disk.
+>
+> **"Changed span", not "claimed span".** An earlier wording bound the rule to
+> claimed spans while the axis it names is `model.SpanVerdict`, which is defined
+> over any changed span and can be `acknowledged` or `unclaimed` — and an
+> acknowledgement is deliberately not a claim. The rule would have excluded two of
+> the four states it exists to keep distinct, including the acknowledged span the
+> tests use. Review caught it.
+>
+> Marking it `partially — enforced by review` was the second error. The property
+> is mechanically testable against fields that already exist, so assigning it to
+> review indefinitely would have made it permanent attention debt for want of
+> fifteen lines.
+
+**Mechanical span verdict** is what the tool resolved about a changed span
+within one changeset — `model.SpanVerdict`, one of `clear`, `acknowledged`,
+`unclaimed` or `unverified`. It is a property of the span's relationship to the
+evidence cited over it, and it is decided without a human.
+
+> Not "lifecycle state of a claim", which is what an earlier draft called this
+> axis and which the note above rejects. Restating it here would have
+> reintroduced the term the rule exists to avoid: a `SpanVerdict` is over a span,
+> is decided per changeset, and belongs to no claim in particular — a span can be
+> `unclaimed` and have no claim at all.
+
+**Sample verdict** is what a human says about that span during calibration,
+applied after the fact to build an error rate. It is a property of the span's
+relationship to reality, and it is **optional** — a sampled span carries none
+until someone reviews it, and a span never sampled carries none at all. The
+mechanical verdict is always present; the sample verdict is not, which is itself
+a reason neither can be derived from the other.
+
+> **This rule does not number its axes, deliberately.** `internal/calibrate`
+> already uses "axis 1" and "axis 2" for a different pair — `sample.go` calls the
+> human verdict axis 1 and the attributable cause axis 2 — so numbering this pair
+> the other way round, as an earlier draft did, put two contradictory meanings of
+> "axis 1" in the same codebase, in the one rule whose purpose is to stop these
+> fields being confused. Review caught it. Name the fields.
+
+Every combination that can occur is meaningful. A span may be mechanically
+`clear` and sampled `false_clear` — the machine collapsed it and a human says it
+should have been read, which is the number the whole sampler exists to produce.
+It may be `acknowledged` and sampled `correct` — an agent said there was nothing
+to assume and was right.
+
+Not every pairing occurs: `internal/calibrate/store.go` admits only `clear` and
+`acknowledged` spans, so an `unverified` span has no sample verdict at all. The
+rule is that the two axes must not be collapsed into one another, not that the
+product of their values is populated.
+
+The claim's *kind* is a third thing again — what the agent established at edit
+time, fixed when the record is written. `contradicted` is a kind for that reason
+(PAWL-033), and a contradicted claim is not sampled at all, because its changeset
+fails and the sampler selects cleared ones.
+
+Collapsing the axes produces a dataset that cannot answer the question
+calibration exists to answer: a binary pass or fail cannot distinguish a claim
+that was false from a claim that was true and did not matter, which is the
+difference between a defect and a threshold that needs moving. It cannot be
+retrofitted onto data already collected, so it binds from before the first
+sample is taken.
+
+> PAWL-007 already splits its sampling into two axes — a binary verdict and an
+> attributable cause. This rule is about a different pair, and all three are
+> represented independently rather than nested: `SampledSpan.Verdict` is the
+> mechanical verdict this rule protects, `SampledSpan.Reviewed` is PAWL-007's
+> binary verdict, and `SampledSpan.Causes` is PAWL-007's attributable cause, a
+> sibling field rather than something held inside `Reviewed`.
+>
+> An earlier draft said PAWL-007's two axes "both live inside sample verdict".
+> That reads as a layering the code does not have, and review caught it: `Causes`
+> is its own field, written by `RecordCause` after `Reviewed` is set. This rule
+> binds only the first pair. Whether three independent axes carry their weight
+> under real sampling is untested, because no samples exist.
