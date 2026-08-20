@@ -59,6 +59,23 @@ decrease from a permissive one.
 pull requests. Nothing here should be able to satisfy a review requirement by
 running.
 
+`fork-pr-contributor-approval` is set to `all_external_contributors`, the
+strictest of the three policies: a workflow proposed from a fork runs only after
+a maintainer approves it, every time, not just on a contributor's first pull
+request.
+
+This matters more here than the setting's name suggests. PAWL-025 AC4 refuses any
+trigger that hands a fork's code access to repository secrets, and this is the
+other half of that argument — AC4 governs what the workflows declare, and this
+governs whether an unreviewed fork gets to run them at all. The release job holds
+`id-token: write` and can sign artifacts as pawl, so "runs automatically on a
+proposal from a stranger" is not a posture this repository can hold.
+
+```bash
+gh api -X PUT repos/trunion-io/pawl/actions/permissions/fork-pr-contributor-approval \
+  -f approval_policy=all_external_contributors
+```
+
 Two settings have no representation in `repo.json` because they are separate
 endpoints:
 
