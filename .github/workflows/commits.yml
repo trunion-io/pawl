@@ -93,9 +93,16 @@ jobs:
         with:
           node-version: '22'
 
-      # Pinned exactly. PAWL-025 AC1 applies to pipeline dependencies as much as
-      # to actions, and the argument for an empty go.mod require block does not
-      # extend to CI.
+      # Direct dependencies are pinned; their transitive graph is not, because
+      # there is no lockfile. Calling that "pinned exactly" would assert a
+      # property this does not deliver — the failure the whole repository exists
+      # to refuse — so it says what is true instead.
+      #
+      # Closing the gap means committing package.json and package-lock.json and
+      # using `npm ci`, which puts a Node lockfile in a repository whose go.mod
+      # has an empty require block. PAWL-027 already names the alternative:
+      # internal/release/lintcommit checks the same rule in Go with no toolchain
+      # at all, and is the obvious replacement if this surface becomes a cost.
       - name: Install commitlint
         run: npm install --no-save --no-audit --no-fund
           @commitlint/cli@21.2.2 @commitlint/config-conventional@21.2.2

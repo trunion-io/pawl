@@ -38,17 +38,26 @@ jobs:
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          required="check govulncheck CodeQL fuzz parsers"
+          # This list must match the required checks in
+          # .github/_setup/ruleset-main.json, and TestRCChecksMatchRuleset holds
+          # the two together. It was previously two lists — one assigned and
+          # never read, the other three checks out of date — which is how it went
+          # stale without anyone noticing. A candidate would have been tagged on
+          # four passing checks while the ruleset required seven.
           runs=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
                    --jq '.check_runs[] | select(.conclusion=="success") | .name')
           missing=""
           while IFS= read -r name; do
-            printf '%s\n' "$runs" | grep -qxF "$name" || missing="$missing $name"
+            [ -n "$name" ] || continue
+            printf '%s\n' "$runs" | grep -qxF "$name" || missing="$missing [$name]"
           done <<'NAMES'
           check
           govulncheck
           CodeQL
           fuzz parsers
+          conventional commits
+          verdict declaration
+          pull request title
           NAMES
           if [ -n "$missing" ]; then
             echo "not yet green:$missing — the other workflow is still running"

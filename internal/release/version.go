@@ -168,10 +168,13 @@ func ParseVersion(s string) (Version, error) {
 
 // Apply returns the next version.
 //
-// While the major version is 0, every bump shifts down one position (AC14, and
-// PAWL-013 AC5). SemVer permits anything below 1.0 to change arbitrarily; a tool
-// that can block a client's release does not get to use that latitude, and every
-// off-the-shelf implementation takes it by default.
+// While the major version is 0, MAJOR moves MINOR and MINOR moves PATCH (AC14,
+// and PAWL-013 AC5). PATCH stays PATCH, because there is no position below it —
+// so this shifts what it can rather than everything, and the tests assert that.
+//
+// SemVer permits anything below 1.0 to change arbitrarily; a tool that can block
+// a client's release does not get to use that latitude, and every off-the-shelf
+// implementation takes it by default.
 func Apply(v Version, b Bump) (Version, Bump) {
 	if v.Major == 0 {
 		switch b {
