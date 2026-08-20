@@ -78,9 +78,14 @@ system shall verify that criterion exists in that spec.
 **AC2** — Where a supersession table names a spec that is not present, the system
 shall report the reference as unresolvable and fail.
 `checkable: yes` (once built) — silently passing a reference to something absent
-would make the check weakest exactly when a spec is mid-flight. This spec is that
-case: it cites PAWL-029, which is on an unmerged branch, so landing these checks
-before PAWL-029 fails on this file. The order is therefore PAWL-029 first.
+would make the check weakest exactly when a spec is mid-flight.
+>
+> An earlier draft claimed this spec was itself that case, because it cites
+> PAWL-029 from an unmerged branch, and concluded PAWL-029 must land first. That
+> was wrong and wrong in a way the grammar above already answered: AC1 and AC2
+> read supersession tables, this spec declares none, and "prose mentioning a
+> superseded criterion is not a declaration" is a sentence in this document. The
+> conclusion was drawn from the criteria without being checked against them.
 
 **AC3** — The system shall verify that a spec's index entry names the same set of
 superseded criteria as that spec's supersession table.
