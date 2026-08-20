@@ -81,10 +81,16 @@ func main() {
 // previousRelease finds the newest release tag, ignoring candidates. Returns
 // 0.0.0 when there is none, which is the state of a repository before its first
 // release and must not be an error.
+//
+// A *failed* `git tag` is a different thing entirely and is fatal. Treating it
+// as "no releases" is C-3 in the release path: the check did not run, so its
+// silence is not evidence of the state it would have reported. The consequence
+// is concrete — on a repository already at v3.0.0, a git failure would compute a
+// fresh low version and the workflow would tag and publish it.
 func previousRelease() (release.Version, string) {
 	out, err := git("tag", "--list", "v*", "--sort=-v:refname")
 	if err != nil {
-		return release.Version{}, ""
+		fail(fmt.Errorf("cannot list tags, so the previous release is unknown: %w", err))
 	}
 	for _, line := range strings.Split(out, "\n") {
 		t := strings.TrimSpace(line)
@@ -137,7 +143,9 @@ func commitsSince(tag string) ([]release.Commit, int, error) {
 func nextRCNumber(version string) int {
 	out, err := git("tag", "--list", "v"+version+"-rc.*")
 	if err != nil {
-		return 1
+		// Falling back to 1 would reuse a candidate number, which AC9 forbids,
+		// and would do it precisely when we cannot see what already exists.
+		fail(fmt.Errorf("cannot list candidate tags for %s: %w", version, err))
 	}
 	var used []int
 	prefix := "v" + version + "-rc."
@@ -157,9 +165,15 @@ func nextRCNumber(version string) int {
 	return used[len(used)-1] + 1
 }
 
+// tagExists backs AC15, which refuses to release over an existing tag. An error
+// must not read as "absent": that would turn the guard into a no-op at the only
+// moment it matters.
 func tagExists(tag string) bool {
 	out, err := git("tag", "--list", tag)
-	return err == nil && strings.TrimSpace(out) != ""
+	if err != nil {
+		fail(fmt.Errorf("cannot check whether %s already exists: %w", tag, err))
+	}
+	return strings.TrimSpace(out) != ""
 }
 
 func git(args ...string) (string, error) {
