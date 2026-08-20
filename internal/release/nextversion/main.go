@@ -64,9 +64,22 @@ func main() {
 	}
 
 	if *rc {
-		n := nextRCNumber(next.String())
-		out["tag"] = fmt.Sprintf("v%s-rc.%d", next, n)
-		out["rc"] = strconv.Itoa(n)
+		// A candidate already pointing at this commit is reused rather than
+		// superseded. Without this the workflow is not idempotent: it fires once
+		// per finishing workflow, so a second run for one commit would see rc.1
+		// exists, compute rc.2, and tag the same commit twice. tag.sh's
+		// --retry-same-commit could never fire, because it was never handed a
+		// tag that already existed.
+		if tag, n := existingCandidateAt(next.String(), "HEAD"); tag != "" {
+			out["tag"] = tag
+			out["rc"] = strconv.Itoa(n)
+			out["reused"] = "true"
+		} else {
+			n := nextRCNumber(next.String())
+			out["tag"] = fmt.Sprintf("v%s-rc.%d", next, n)
+			out["rc"] = strconv.Itoa(n)
+			out["reused"] = "false"
+		}
 	} else {
 		tag := "v" + next.String()
 		// AC15: refuse to release over an existing tag.
@@ -135,6 +148,60 @@ func commitsSince(tag string) ([]release.Commit, int, error) {
 		commits = append(commits, c)
 	}
 	return commits, unconventional, nil
+}
+
+// existingCandidateAt returns the candidate tag for version that already points
+// at ref, if there is one.
+//
+// AC9 says candidate numbers are never reused. Reusing the *tag* for the same
+// commit is the opposite of that: it is what stops a second run minting a new
+// number for work that has already been tagged.
+func existingCandidateAt(version, ref string) (string, int) {
+	want, err := git("rev-parse", ref+"^{commit}")
+	if err != nil {
+		fail(fmt.Errorf("cannot resolve %s: %w", ref, err))
+	}
+	want = strings.TrimSpace(want)
+
+	out, err := git("tag", "--list", "v"+version+"-rc.*")
+	if err != nil {
+		fail(fmt.Errorf("cannot list candidate tags for %s: %w", version, err))
+	}
+	prefix := "v" + version + "-rc."
+	for _, line := range strings.Split(out, "\n") {
+		tag := strings.TrimSpace(line)
+		if !strings.HasPrefix(tag, prefix) {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimPrefix(tag, prefix))
+		if err != nil {
+			continue
+		}
+		at, err := git("rev-parse", tag+"^{commit}")
+		if err != nil {
+			fail(fmt.Errorf("cannot resolve %s: %w", tag, err))
+		}
+		if strings.TrimSpace(at) != want {
+			continue
+		}
+
+		// Only an annotated tag is eligible for reuse. "Published" would
+		// overstate it: this reads local refs, and an annotated tag left by an
+		// interrupted run may never have reached origin — which the retry path
+		// handles by pushing it.
+		// tag.sh refuses a lightweight one, so reusing it here would hand back
+		// the same name on every attempt and the workflow would exhaust its
+		// retries without advancing — two correct checks that deadlock when
+		// composed. Leaving it unclaimed lets nextRCNumber step past it.
+		kind, err := git("cat-file", "-t", "refs/tags/"+tag)
+		if err != nil {
+			fail(fmt.Errorf("cannot determine the type of %s: %w", tag, err))
+		}
+		if strings.TrimSpace(kind) == "tag" {
+			return tag, n
+		}
+	}
+	return "", 0
 }
 
 // nextRCNumber returns one more than the highest candidate for this version

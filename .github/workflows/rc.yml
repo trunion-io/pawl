@@ -14,8 +14,21 @@ on:
 permissions:
   contents: write   # create the tag
 
+# Grouped per commit, not per workflow. A single group looked like it made
+# allocation serial, but a concurrency group holds one running run and one
+# pending run: a third event replaces the pending one even with
+# cancel-in-progress false. Each commit emits two workflow_run events, so
+# serialising everything would drop runs and leave a green commit with no
+# candidate — the AC8 failure it was meant to prevent, arriving by a different
+# route.
+#
+# Per commit, the two events for one SHA are serialised rather than collapsed —
+# with cancel-in-progress false the second waits and then runs, and
+# --retry-same-commit makes it a no-op. No commit can evict another. The race
+# between commits is handled where it actually occurs, by retrying allocation
+# below.
 concurrency:
-  group: rc-${{ github.event.workflow_run.head_sha }}
+  group: release-candidate-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 jobs:
@@ -71,30 +84,73 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # AC10: no commit since the last release implies a change means no
-      # candidate. Tagging a docs-only commit would bury the real ones.
-      - name: Compute the candidate version
+      # AC8 and AC10. Allocation reads the tags that exist, so two commits can
+      # compute the same number before either publishes. The loser's push fails,
+      # and retrying re-reads the tags and takes the next one — which is why this
+      # does not need a queue slot to be correct.
+      - name: Allocate and publish a candidate
         if: steps.gate.outputs.ready == 'true'
         id: v
-        run: go run ./internal/release/nextversion --rc
-
-      - name: Tag the candidate
-        if: steps.gate.outputs.ready == 'true' && steps.v.outputs.release == 'true'
         env:
-          TAG: ${{ steps.v.outputs.tag }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          set -euo pipefail
-          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            echo "$TAG already exists; nothing to do"
-            exit 0
-          fi
-          git tag -a "$TAG" "$SHA" -m "Release candidate $TAG
+          set -eu
+          # Contention is not bounded by a count, because any count leaves a
+          # burst size at which a green commit gets no candidate — which is the
+          # AC8 failure, not a mitigation of it. Fifty was as arbitrary as five.
+          #
+          # It is bounded by progress instead. tag.sh returns 3 only when origin
+          # holds a *different* object under that name, so every contention loss
+          # means another commit published a candidate and the space advanced.
+          # A finite burst therefore terminates. What must not happen is looping
+          # while nothing moves, so the guard is that the allocated name has to
+          # differ from the last one we lost: if allocation returns the same
+          # name twice, contention is not what is happening and it stops.
+          #
+          # Genuinely transient failures stay bounded at three, because nothing
+          # about them implies progress.
+          transient=0
+          last_lost=""
+          while [ "$transient" -lt 3 ]; do
+            # Fatal, not tolerated. Allocation reads the tags it can see, so
+            # a failed fetch means allocating against a stale view and minting a
+            # number another run already published. C-3: a step that could not
+            # run must not be treated as one that found nothing.
+            git fetch --tags --quiet origin
 
-          Bump: ${{ steps.v.outputs.bump }} from ${{ steps.v.outputs.previous }}
-          Commits since last release: ${{ steps.v.outputs.commits }}"
-          git push origin "$TAG"
-          echo "tagged $TAG"
+            out=$(go run ./internal/release/nextversion --rc)
+            printf '%s\n' "$out" >> "$GITHUB_OUTPUT"
+
+            release=$(printf '%s\n' "$out" | sed -n 's/^release=//p')
+            if [ "$release" != "true" ]; then
+              echo "no version-affecting commits since $(printf '%s\n' "$out" | sed -n 's/^previous_tag=//p')"
+              exit 0
+            fi
+
+            tag=$(printf '%s\n' "$out" | sed -n 's/^tag=//p')
+            bump=$(printf '%s\n' "$out" | sed -n 's/^bump=//p')
+            prev=$(printf '%s\n' "$out" | sed -n 's/^previous=//p')
+            n=$(printf '%s\n' "$out" | sed -n 's/^commits=//p')
+
+            status=0
+            .github/scripts/tag.sh --retry-same-commit "$tag" "$SHA" \
+              "Release candidate $tag" \
+              "Bump: $bump from $prev, $n commits since the last release" || status=$?
+
+            case "$status" in
+              0) exit 0 ;;
+              3) if [ "$tag" = "$last_lost" ]; then
+                   echo "allocation returned $tag again after losing it; this is not contention"
+                   exit 1
+                 fi
+                 last_lost=$tag
+                 echo "$tag was taken by another commit; reallocating" ;;
+              *) transient=$((transient + 1))
+                 echo "tag.sh failed with status $status (attempt $transient of 3)" ;;
+            esac
+          done
+          echo "giving up: tag.sh kept failing for reasons other than a lost race"
+          exit 1
 
       - name: Report
         if: steps.gate.outputs.ready == 'true' && steps.v.outputs.release != 'true'

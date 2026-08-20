@@ -47,7 +47,7 @@ vet:
 	go vet ./...
 
 .PHONY: check
-check: fmt vet test check-pins ## What CI runs
+check: fmt vet test check-pins check-tagger ## What CI runs
 
 .PHONY: dist
 FUZZTIME ?= 30s
@@ -101,15 +101,68 @@ check-pins: ## PAWL-025 AC1 — every GitHub Action pinned to an immutable commi
 		exit 1; \
 	fi; \
 	echo "check-pins: ok — $$(printf '%s\n' "$$refs" | grep -c . ) actions pinned to commits"
+.PHONY: check-pins
 
 fuzz: ## PAWL-025 AC8 — exercise the parsers that read input we did not produce
 	go test -run=XXX -fuzz=FuzzJUnit      -fuzztime=$(FUZZTIME) ./internal/evidence
 	go test -run=XXX -fuzz=FuzzCoverage   -fuzztime=$(FUZZTIME) ./internal/evidence
 	go test -run=XXX -fuzz=FuzzTypecheck  -fuzztime=$(FUZZTIME) ./internal/evidence
 	go test -run=XXX -fuzz=FuzzRecord     -fuzztime=$(FUZZTIME) ./internal/claimlog
+.PHONY: fuzz
 
 hooks: ## Point git at .githooks (PAWL-027) — one command per clone
 	@git config core.hooksPath .githooks
 	@echo "core.hooksPath = .githooks"
 	@echo "commit-msg validates the message; pre-push runs make check."
 	@echo "Both are bypassable with --no-verify; CI is the enforcement."
+.PHONY: hooks
+
+check-tagger: ## Lint: no workflow writes a tag directly
+	@# A lint, and only a lint. Backslash continuations are joined first, so a
+	@# git invocation split that way is still seen — but a grep is neither a
+	@# shell parser nor a YAML parser, and two forms are known to pass it:
+	@# indirection like `g=git; $$g tag`, and a command split across source lines
+	@# by YAML folding in a `run: >` block.
+	@#
+	@# What guarantees the behaviour is TestTagScript* in internal/e2e: real git,
+	@# a real bare remote, identity unset. An earlier version also grepped tag.sh
+	@# for `git config user.name`, which reported ok with both lines commented
+	@# out — a false assurance beside a real one. It was removed rather than
+	@# tightened, because the test already establishes the property and a grep
+	@# cannot.
+	@files=$$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null); \
+	if [ -z "$$files" ]; then \
+		echo "check-tagger: FAIL — no workflow files found; the check cannot run"; \
+		exit 1; \
+	fi; \
+	bad=""; \
+	for f in $$files; do \
+		joined=$$(sed -e ':a' -e '/\\$$/{N;s/\\\n//;ba' -e '}' "$$f") || { \
+			echo "check-tagger: FAIL — cannot read $$f; the check did not run"; \
+			exit 1; \
+		}; \
+		case "$$joined" in \
+			*git*) ;; \
+			*) continue ;; \
+		esac; \
+		printf '%s\n' "$$joined" \
+			| grep -qE 'git[^;|&]*[[:space:]]tag([[:space:]]|$$)'; \
+		status=$$?; \
+		case "$$status" in \
+			0) bad="$$bad $$f" ;; \
+			1) ;; \
+			*) echo "check-tagger: FAIL — grep exited $$status scanning $$f; the check did not run"; \
+			   exit 1 ;; \
+		esac; \
+	done; \
+	if [ -n "$$bad" ]; then \
+		for f in $$bad; do echo "  writes a tag directly: $$f"; done; \
+		echo "check-tagger: FAIL — tags are written by .github/scripts/tag.sh only,"; \
+		echo "              which is the one place that configures a tagger."; \
+		exit 1; \
+	fi; \
+	[ -x .github/scripts/tag.sh ] || { echo "check-tagger: FAIL — .github/scripts/tag.sh is missing or not executable"; exit 1; }; \
+	echo "check-tagger: ok — no direct tag write detected by this lint"; \
+	echo "              (indirection and YAML folding are not detectable here;"; \
+	echo "               the behaviour is established by TestTagScript*)"
+.PHONY: check-tagger
