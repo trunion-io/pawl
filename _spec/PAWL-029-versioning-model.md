@@ -6,14 +6,24 @@ immutable) and [PAWL-027](./PAWL-027-contribution-and-release-flow.md).
 
 **Supersedes by reference:**
 
-| Criterion | Was | Now |
+| Criterion | Was | Replaced by |
 |---|---|---|
-| PAWL-013 **AC2** | any verdict-altering change is MAJOR, including a bug fix | AC1 below — MAJOR is a break in the command-line contract |
-| PAWL-013 **AC13** | no release branches; every release cut from `main` | AC7 below — a maintenance branch is permitted for a fix to a released version |
-| PAWL-027 **AC13** (bump table) | `Verdict-Affecting: yes` → MAJOR | AC3 below |
-| PAWL-027 **AC14** | pre-1.0 shifts every bump down one position | AC4 below |
+| PAWL-013 **AC2** | any verdict-altering change is MAJOR, including a bug fix | AC1, AC2 |
+| PAWL-013 **AC5** | below 1.0, apply AC2 and AC3 one position down | AC4 |
+| PAWL-013 **AC13** | no release branches; every release cut from `main` | AC7 |
+| PAWL-013 **AC1** | tagged `vMAJOR.MINOR.PATCH` on a commit reachable from `main` | AC9 — unchanged for ordinary releases, narrowed for a maintenance release |
+| PAWL-013 **AC7** | a tag not reachable from `main` fails the release | AC9 |
+| PAWL-027 **AC3** | `Verdict-Affecting: yes` forces MAJOR whatever the type | AC3, AC5 — it stops being a version input |
+| PAWL-027 **AC4** | the trailer is stated as `yes` or `no` | AC5 — the same trigger, a three-way answer |
+| PAWL-027 **AC13** | bump table with `Verdict-Affecting: yes` → MAJOR | AC3 |
+| PAWL-027 **AC14** | pre-1.0 shifts every bump down one position | AC4 |
 
-It also closes PAWL-013's **open decision** on supported versions and backports.
+Listing AC1, AC5 and AC7 of PAWL-013 matters: leaving them active would have left
+a contract that contradicts itself, because AC1 and AC7 require every release tag
+to be reachable from `main` while AC7 below permits a maintenance release that is
+not, and AC5 requires the pre-1.0 shifting AC4 removes. Superseding four criteria
+and leaving three that disagree with them is not a narrower change, it is an
+ambiguous one.
 
 ## Stakeholders
 
@@ -29,59 +39,60 @@ including a bug fix. The reasoning was that a client's contract with pawl is
 which changesets pass, so a corrected line count breaks that contract even though
 every flag still works.
 
-**That is being replaced, and the reason it is being replaced is that it does not
-survive automation.** Under AC2, almost any real fix in the resolver, the policy
-or the accounting is MAJOR — the two-line bounds check in PAWL-026 would have
-been. A human cutting releases batches those and bumps occasionally; PAWL-027
-computes a version from every release, so the same rule produces a new major
-every few days. Version 47 then means the verdicts moved 47 times, and MAJOR has
-stopped carrying the thing every reader assumes it carries.
+**That is being replaced because it does not survive automation.** Under AC2 a
+fix in the resolver, the policy or the accounting is MAJOR — PAWL-026's two-line
+bounds check would have been. A human cutting releases batches those and bumps
+occasionally; PAWL-027 computes a version from every release, so the rule applies
+every time rather than sometimes.
 
-There is a second cost. Clients are told to pin (`docs/install.md`), so "upgrade
-to get the security fix" came to mean "accept a change in which changesets pass"
-— precisely what a pinning client was avoiding. PAWL-013 recorded that as an open
-decision and it has been open since.
+How often that produces a major depends on how often such fixes land, which has
+not been measured: the evidence is one qualifying fix and the per-release
+mechanism, not a rate. What is established without a rate is that the rule now
+applies mechanically and unconditionally, where AC2 was written for a process
+that applied it by judgement.
 
-So: SemVer means here what it means everywhere. MAJOR is a break in the
-command-line contract, and a fix that corrects behaviour is a fix.
+Under standard SemVer a correction of behaviour to its intended outcome is a
+PATCH. That is the ordinary reading of the specification and it needs no
+appeal to what other tools do.
 
 ### What that concedes, and what still has to be handled
 
-Every other analyser does this. ESLint corrects a false positive in a patch and
-some builds start passing that did not; nobody calls that breaking, and a tool
-that could not fix a bug without a major bump could not fix bugs.
-
-But pawl is a gate, and a gate has an asymmetry a linter does not:
+pawl is a gate, and a gate has an asymmetry:
 
 | A fix that makes the gate… | What the client sees |
 |---|---|
 | **stricter** — escalates more | a build fails. Loud, immediate, investigated. |
-| **more permissive** — escalates less | nothing. Changesets that needed human review now merge clean. |
+| **more permissive** — escalates less | for a client reading only pass and fail, nothing. |
 
-The strict direction announces itself and needs no version machinery. **The
-permissive direction is silent by construction**: there is no failure to observe,
-no error, no log line — the absence of an escalation is indistinguishable from a
-changeset that never needed one.
+The strict direction announces itself and needs no version machinery. The
+permissive direction produces no failure to observe, and the absence of an
+escalation reads the same as a changeset that never needed one.
 
-That asymmetry is not addressed by SemVer, and it is not addressed by backports
-either: backporting a fix that loosens the gate delivers the loosening to the
-version a cautious client pinned *because* they did not want change.
+That is a claim about what a client sees, not about what is observable in
+principle: a team tracking escalation counts over time would notice the rate
+change. The disclosure below is for the client who consumes a verdict and nothing
+else, which is the client the gate is aimed at.
 
 `Verdict-Affecting` already captures the signal at commit time (PAWL-027 AC3,
-AC4). Today it collapses to yes or no. Recording the direction costs an author
-nothing extra at the moment they already have to answer.
+AC4). Today it collapses to yes or no. Recording the direction reuses that moment
+— though not for free: deciding *which side* the gate moved is a judgement the
+boolean did not ask for.
 
 ## Versioning
 
-**AC1** — The system shall treat a change that removes or alters the meaning of a
-command, flag, input format or output format as MAJOR.
-`checkable: partially` — the classification is a review judgement; that a MAJOR
-release accompanies a change to the CLI surface can be checked.
+**AC1** — The system shall treat a change that removes a command or flag, or
+alters the meaning of an existing command, flag, input format or output format,
+as MAJOR.
+`checkable: no` — whether a change alters a meaning is a review judgement and
+nothing in the tree can decide it. Recorded as unchecked rather than as
+`partially`, because a partial criterion with no check behind it is a permanent
+tax on attention dressed as coverage. AC10 gives the mechanically enforceable
+half its own criterion.
 
 **AC2** — The system shall treat an addition that does not alter existing
 behaviour as MINOR, and a correction of behaviour to its documented or intended
 outcome as PATCH.
-`checkable: partially`
+`checkable: no` — same reasoning as AC1. AC3 is what a machine enforces.
 
 **AC3** — The system shall compute the version bump as follows, highest wins:
 
@@ -92,30 +103,36 @@ outcome as PATCH.
 | any `fix`, `perf` | PATCH |
 | only `docs`, `test`, `ci`, `build`, `chore`, `refactor`, `style` | none |
 
-`checkable: yes` (once built) — `Verdict-Affecting` no longer appears in this
-table. It ceases to be a version input and becomes a disclosure input (AC5).
+`checkable: yes` (once built) — `Verdict-Affecting` no longer appears. It ceases
+to be a version input and becomes a disclosure input (AC5).
 
 **AC4** — The system shall apply the same bump below 1.0 as above it.
-`checkable: yes` (once built) — PAWL-027 AC14 shifted every bump down a position
-so that pre-1.0 could not be used as licence to change anything. With AC1 the
-shifting is no longer buying that, and it produces a first release of `v0.0.1`
-for a tool that `docs/install.md` and `examples/pawl-gate.yml` both document as
-`0.1.0`. The protection that mattered is now in AC5 and AC6.
+`checkable: yes` (once built) — supersedes PAWL-013 AC5 and PAWL-027 AC14, which
+shifted every bump down so that pre-1.0 could not be used as licence to change
+anything. With MAJOR narrowed by AC1 the shifting no longer buys that, and the
+protection that mattered now lives in AC5 and AC6.
+
+**AC10** — The system shall refuse to publish a release whose computed version is
+MAJOR unless a commit in that release carries `!` or a `BREAKING CHANGE` footer.
+`checkable: yes` (once built) — the enforceable half of AC1. It cannot tell
+whether a meaning changed; it can refuse a major bump nobody declared, which is
+the failure mode a machine can catch.
 
 ## Verdict direction
 
-**AC5** — Where a change alters which changesets pass, the system shall require
-the commit to declare the direction as `stricter`, `more-permissive`, or `no`.
-`checkable: yes` (once built) — extends PAWL-027 AC4, which already refuses
-silence from a commit touching a deciding module. The question an author is asked
-changes from a yes-or-no to a three-way; the moment they are asked does not.
+**AC5** — Where a change touches a module that participates in deciding a
+verdict, the system shall require the commit to declare `Verdict-Affecting` as
+`stricter`, `more-permissive` or `no`, and shall reject a commit that omits it.
+`checkable: yes` (once built) — the trigger is PAWL-027 AC4's, unchanged and
+mechanically detectable: `internal/policy`, `internal/resolve`,
+`internal/accounting`, `internal/evidence`.
 
-> **`more-permissive` is the answer this whole spec exists to surface.** A
-> stricter gate fails a build and gets investigated. A more permissive gate
-> produces no signal at all, and under standard SemVer it now ships in a PATCH —
-> which is the right call for a bug fix and the wrong one to leave undisclosed.
-> Making the author name the direction is what turns an invisible change into a
-> recorded one, at the point where the knowledge exists (C-2).
+> The trigger deliberately is not "where a change alters which changesets pass".
+> That phrasing makes `no` unanswerable — a change that alters them cannot
+> truthfully declare `no` — and makes enforcement depend on detecting the very
+> thing the non-functional section says cannot be verified. Touching a deciding
+> module is a fact about the diff. Whether it moved verdicts, and in which
+> direction, is the author's claim about that fact.
 
 **AC6** — The system shall name changes declared `more-permissive` first and
 separately in the release notes, and shall state that they may allow changesets
@@ -126,24 +143,32 @@ one question ahead of every other, and it is not "did the API change".
 **AC7** — Where a fix is required for a released version that a client cannot
 take the current release to obtain, the system may cut it on a maintenance
 branch from that version's tag.
-`checkable: partially` — supersedes PAWL-013 AC13 and closes its open decision.
-Trunk-based remains the default and every ordinary release is still cut from
-`main`; this exists for the case PAWL-013 named and had no answer to, which is a
-security fix a pinning client needs without the changes that followed it.
+`checkable: no` — whether a client can take the current release is a judgement
+about that client. AC9 is the mechanical rule this permits.
 
-**AC8** — A backport shall carry the same direction declaration as the change it
-originates from.
-`checkable: yes` (once built) — a fix that loosens the gate loosens it on the
-branch too, and a client pinned there is the one least expecting it. Backporting
-without the declaration would deliver silently exactly what AC5 exists to
-disclose.
+**AC9** — The system shall accept a release tag that is reachable from `main`, or
+reachable from a maintenance branch whose first commit is a released tag; and
+shall reject any other.
+`checkable: yes` (once built) — supersedes PAWL-013 AC1 and AC7, which required
+reachability from `main` without exception. Those criteria and AC7 above cannot
+both hold, and this is the rule that replaces them: still refusing a tag from
+nowhere, no longer refusing one from a branch rooted in a release.
+
+**AC8** — A backport shall carry a direction declaration classified against the
+branch it lands on.
+`checkable: yes` (once built) — the declaration is required as for any other
+commit; what is specified here is what it is measured against. Copying the
+source commit's answer would be wrong often enough to matter: the same logical
+correction can be stricter relative to one baseline and more permissive relative
+to another, because the branch has drifted. A disclosure computed against the
+wrong baseline is worse than none, since it is believed.
 
 ## Non-functional
 
 - **This is a narrowing of what MAJOR promises, and it must be stated where
-  clients read it.** `docs/install.md` currently tells clients that any change to
-  gate behaviour is a major bump. That stops being true here, and a client pinning
-  on the strength of it would be pinning on a promise that no longer exists.
+  clients read it.** `docs/install.md` tells clients that any change to gate
+  behaviour is a major bump. That stops being true here, and a client pinning on
+  the strength of it would be pinning on a promise that no longer exists.
 - **The direction is a claim, and claims are what this product is about.** An
   author writing `no` on a change that loosens the gate has asserted something
   they did not establish. Nothing here can check it — the honest position is that
@@ -152,11 +177,17 @@ disclose.
   hooks, in CI and in two skills. Renaming it to `Verdict-Direction` would be
   tidier and would break every commit already carrying it.
 
+## What this closes, and what it does not
+
+PAWL-013's open decision asked two questions: **which versions are supported**,
+and **is there a backport path**. AC7 and AC9 answer the second. The first is
+**not** answered — no support window is stated, and PAWL-013 said that question
+cannot be deferred past a first engagement because a client's security team asks
+it during procurement. Deferring it again is a choice recorded as one.
+
 ## Out of scope
 
-- **Which versions are supported for how long.** AC7 permits a maintenance
-  branch; it does not commit to a support window, and a client's security team
-  will ask for one.
+- **The support window.** Named above rather than quietly omitted.
 - **Verifying a declared direction.** A replay harness could do it — same
   changeset, two versions, compare verdicts — and it is the natural use of
   PAWL-007's sampler. Worth its own spec.
