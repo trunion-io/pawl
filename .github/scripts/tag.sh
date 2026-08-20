@@ -38,12 +38,23 @@ fi
 after_failed_push() {
   _tag=$1
   _ours=$(git rev-parse "refs/tags/$_tag")
-  _theirs=$(git ls-remote --tags origin "refs/tags/$_tag" 2>/dev/null \
+  # ls-remote's own status is captured rather than inferred from empty output:
+  # an unreadable origin and an origin that simply lacks the name both produce
+  # nothing, and only one of them justifies saying the name is free.
+  _listing=$(git ls-remote --tags origin "refs/tags/$_tag" 2>/dev/null)
+  _listed=$?
+  _theirs=$(printf '%s\n' "$_listing" \
     | awk -v r="refs/tags/$_tag" '$2 == r { print $1 }')
+
+  if [ "$_listed" -ne 0 ]; then
+    git tag -d "$_tag" >/dev/null
+    echo "tag.sh: push of $_tag failed and origin could not be read; treating as transient" >&2
+    return 1
+  fi
 
   if [ -z "$_theirs" ]; then
     git tag -d "$_tag" >/dev/null
-    echo "tag.sh: push of $_tag failed and origin does not hold that name; treating as transient" >&2
+    echo "tag.sh: push of $_tag failed though origin does not hold that name; treating as transient" >&2
     return 1
   fi
 

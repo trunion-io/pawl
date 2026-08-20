@@ -463,7 +463,8 @@ func TestTagScriptDistinguishesTransientFromLostRace(t *testing.T) {
 	cmd := exec.Command(tagScript(t), "v0.1.0-rc.1", "HEAD", "candidate")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
-	err := cmd.Run()
+	combined, err := cmd.CombinedOutput()
+	stderr := string(combined)
 
 	var code int
 	if ee, ok := err.(*exec.ExitError); ok {
@@ -474,6 +475,12 @@ func TestTagScriptDistinguishesTransientFromLostRace(t *testing.T) {
 	}
 	if code != 1 {
 		t.Errorf("expected a transient failure (1), got %d", code)
+	}
+	// The message must say what was observed. An unreadable origin and an origin
+	// that lacks the name both produce no output, and only one of them justifies
+	// saying the name is free.
+	if !strings.Contains(stderr, "could not be read") {
+		t.Errorf("an unreadable origin must be reported as such, got: %s", stderr)
 	}
 
 	local := exec.Command("git", "tag", "-l", "v0.1.0-rc.1")
