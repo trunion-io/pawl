@@ -73,6 +73,20 @@ func runTag(t *testing.T, dir string, args ...string) (string, error) {
 	return string(out), err
 }
 
+// pushedTag returns the tag's ref on origin, or "" if it never arrived. The
+// suite claimed a real bare remote exercised the push and nothing asserted it —
+// deleting `git push` from tag.sh left every test passing.
+func pushedTag(t *testing.T, dir, tag string) string {
+	t.Helper()
+	cmd := exec.Command("git", "ls-remote", "--tags", "origin", "refs/tags/"+tag)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ls-remote: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func tagTarget(t *testing.T, dir, tag string) string {
 	t.Helper()
 	cmd := exec.Command("git", "rev-parse", tag+"^{commit}")
@@ -95,6 +109,9 @@ func TestTagScriptWritesAnnotatedTagWithoutAnIdentity(t *testing.T) {
 	}
 	if got := tagTarget(t, dir, "v0.1.0"); got != second {
 		t.Errorf("tag points at %s, want %s", got, second)
+	}
+	if pushedTag(t, dir, "v0.1.0") == "" {
+		t.Error("the tag was never pushed to origin; a workflow would report success without publishing it")
 	}
 
 	cmd := exec.Command("git", "for-each-ref", "--format=%(taggername) %(taggeremail)", "refs/tags/v0.1.0")

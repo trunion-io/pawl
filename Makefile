@@ -118,9 +118,11 @@ hooks: ## Point git at .githooks (PAWL-027) — one command per clone
 .PHONY: hooks
 
 check-tagger: ## Lint: no workflow writes a tag directly
-	@# A lint, and only a lint. Line continuations are joined first, so a git
-	@# invocation split across lines is still seen — but a grep is not a shell
-	@# parser and never will be, and indirection like `g=git; $$g tag` passes it.
+	@# A lint, and only a lint. Backslash continuations are joined first, so a
+	@# git invocation split that way is still seen — but a grep is neither a
+	@# shell parser nor a YAML parser, and two forms are known to pass it:
+	@# indirection like `g=git; $$g tag`, and a command split across source lines
+	@# by YAML folding in a `run: >` block.
 	@#
 	@# What guarantees the behaviour is TestTagScript* in internal/e2e: real git,
 	@# a real bare remote, identity unset. An earlier version also grepped tag.sh

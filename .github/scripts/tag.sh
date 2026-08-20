@@ -6,10 +6,14 @@
 # then failed at the write — an annotated tag records a tagger and a runner has
 # no identity.
 #
-# Centralising it turns an invariant that could only be approximated into one
-# that can be checked exactly: `make check-tagger` asserts no workflow invokes
-# `git tag` directly, which a grep can establish, where "the tagging job also
-# sets an identity somewhere in the file" could not.
+# Centralising it means one place to test rather than one claim to approximate.
+# `make check-tagger` lints for workflows writing a tag directly, but it is a
+# grep and misses what a grep must: indirection like `g=git; $g tag`, and a
+# command split across source lines by YAML folding. It cannot establish that
+# every workflow uses this script.
+#
+# What is established is this script's behaviour, by TestTagScript* in
+# internal/e2e — real git, a real bare remote, identity unset.
 #
 # usage: tag.sh [--retry-same-commit] <tag> <commit-ish> <message...>
 set -eu
