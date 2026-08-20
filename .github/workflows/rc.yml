@@ -95,16 +95,23 @@ jobs:
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -eu
-          # Two budgets, because losing a race and failing to push are different
-          # things. A fixed ceiling for both does not establish AC8: with six
-          # commits allocating in lockstep the last loses rc.1 through rc.5 and
-          # exits with no candidate at all. Contention is retried generously,
-          # since every loss means some other commit definitely won a number and
-          # the space is advancing; a genuine failure is retried three times and
-          # then reported.
-          contention=0
+          # Contention is not bounded by a count, because any count leaves a
+          # burst size at which a green commit gets no candidate — which is the
+          # AC8 failure, not a mitigation of it. Fifty was as arbitrary as five.
+          #
+          # It is bounded by progress instead. tag.sh returns 3 only when origin
+          # holds a *different* object under that name, so every contention loss
+          # means another commit published a candidate and the space advanced.
+          # A finite burst therefore terminates. What must not happen is looping
+          # while nothing moves, so the guard is that the allocated name has to
+          # differ from the last one we lost: if allocation returns the same
+          # name twice, contention is not what is happening and it stops.
+          #
+          # Genuinely transient failures stay bounded at three, because nothing
+          # about them implies progress.
           transient=0
-          while [ "$contention" -lt 50 ] && [ "$transient" -lt 3 ]; do
+          last_lost=""
+          while [ "$transient" -lt 3 ]; do
             # Fatal, not tolerated. Allocation reads the tags it can see, so
             # a failed fetch means allocating against a stale view and minting a
             # number another run already published. C-3: a step that could not
@@ -132,17 +139,17 @@ jobs:
 
             case "$status" in
               0) exit 0 ;;
-              3) contention=$((contention + 1))
-                 echo "$tag was taken by another commit; reallocating (contention $contention)" ;;
+              3) if [ "$tag" = "$last_lost" ]; then
+                   echo "allocation returned $tag again after losing it; this is not contention"
+                   exit 1
+                 fi
+                 last_lost=$tag
+                 echo "$tag was taken by another commit; reallocating" ;;
               *) transient=$((transient + 1))
                  echo "tag.sh failed with status $status (attempt $transient of 3)" ;;
             esac
           done
-          if [ "$transient" -ge 3 ]; then
-            echo "giving up: tag.sh kept failing for reasons other than a lost race"
-          else
-            echo "giving up: lost 50 consecutive races, which is not contention but a loop"
-          fi
+          echo "giving up: tag.sh kept failing for reasons other than a lost race"
           exit 1
 
       - name: Report
