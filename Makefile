@@ -145,10 +145,15 @@ check-tagger: ## Lint: no workflow writes a tag directly
 			*git*) ;; \
 			*) continue ;; \
 		esac; \
-		if printf '%s\n' "$$joined" \
-			| grep -qE 'git[^;|&]*[[:space:]]tag([[:space:]]|$$)'; then \
-			bad="$$bad $$f"; \
-		fi; \
+		printf '%s\n' "$$joined" \
+			| grep -qE 'git[^;|&]*[[:space:]]tag([[:space:]]|$$)'; \
+		status=$$?; \
+		case "$$status" in \
+			0) bad="$$bad $$f" ;; \
+			1) ;; \
+			*) echo "check-tagger: FAIL — grep exited $$status scanning $$f; the check did not run"; \
+			   exit 1 ;; \
+		esac; \
 	done; \
 	if [ -n "$$bad" ]; then \
 		for f in $$bad; do echo "  writes a tag directly: $$f"; done; \

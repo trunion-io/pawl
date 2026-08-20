@@ -114,11 +114,23 @@ func TestTagScriptWritesAnnotatedTagWithoutAnIdentity(t *testing.T) {
 		t.Error("the tag was never pushed to origin; a workflow would report success without publishing it")
 	}
 
-	cmd := exec.Command("git", "for-each-ref", "--format=%(taggername) %(taggeremail)", "refs/tags/v0.1.0")
-	cmd.Dir = dir
-	b, _ := cmd.Output()
-	if !strings.Contains(string(b), "github-actions[bot]") {
-		t.Errorf("tag has no tagger identity: %q", strings.TrimSpace(string(b)))
+	// Each field separately. A combined substring proves neither: the expected
+	// email contains "github-actions[bot]" too, so a wrong name passed, and a
+	// correct name with a machine-local email passed as well — which is the
+	// identity this script exists to avoid.
+	for _, f := range []struct{ format, want string }{
+		{"%(taggername)", "github-actions[bot]"},
+		{"%(taggeremail)", "<41898282+github-actions[bot]@users.noreply.github.com>"},
+	} {
+		cmd := exec.Command("git", "for-each-ref", "--format="+f.format, "refs/tags/v0.1.0")
+		cmd.Dir = dir
+		b, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.TrimSpace(string(b)); got != f.want {
+			t.Errorf("%s = %q, want %q", f.format, got, f.want)
+		}
 	}
 }
 
@@ -329,5 +341,31 @@ func TestTagScriptRetryPushesATagTheRemoteNeverGot(t *testing.T) {
 	}
 	if got := tagTarget(t, dir, "v0.1.0-rc.1"); got != second {
 		t.Errorf("tag moved to %s, want %s", got, second)
+	}
+}
+
+// A losing race leaves the tag created locally and the push rejected. The local
+// tag must not survive: a later `git fetch --tags` refuses to clobber it, so a
+// caller retrying allocation would fetch, fail, and never reallocate.
+func TestTagScriptRemovesTheLocalTagWhenThePushIsRejected(t *testing.T) {
+	dir, first, _ := tagRepo(t)
+
+	// The remote already holds this tag on another commit — the winner of a race.
+	push := exec.Command("git", "push", "origin", first+":refs/tags/v0.1.0-rc.1")
+	push.Dir = dir
+	if out, err := push.CombinedOutput(); err != nil {
+		t.Fatalf("seeding the remote tag: %v\n%s", err, out)
+	}
+
+	out, err := runTag(t, dir, "v0.1.0-rc.1", "HEAD", "candidate")
+	if err == nil {
+		t.Fatalf("expected the push to be rejected, got success:\n%s", out)
+	}
+
+	local := exec.Command("git", "tag", "-l", "v0.1.0-rc.1")
+	local.Dir = dir
+	b, _ := local.Output()
+	if strings.TrimSpace(string(b)) != "" {
+		t.Error("the local tag survived a rejected push; a retry would fetch, fail, and never reallocate")
 	}
 }

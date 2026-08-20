@@ -22,9 +22,11 @@ permissions:
 # candidate — the AC8 failure it was meant to prevent, arriving by a different
 # route.
 #
-# Per commit, the two events for one SHA collapse into one run, which is what
-# should collapse, and no commit can evict another. The race between commits is
-# handled where it actually occurs, by retrying allocation below.
+# Per commit, the two events for one SHA are serialised rather than collapsed —
+# with cancel-in-progress false the second waits and then runs, and
+# --retry-same-commit makes it a no-op. No commit can evict another. The race
+# between commits is handled where it actually occurs, by retrying allocation
+# below.
 concurrency:
   group: release-candidate-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: false

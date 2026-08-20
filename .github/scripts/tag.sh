@@ -75,8 +75,10 @@ if git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Both are required. Git refuses with "empty ident name" if either is missing,
-# and it refuses at the tag write rather than at configuration time.
+# Set both, so the tagger is this bot rather than whatever git infers. On a
+# runner git synthesises an address like <runner@runnervm...internal> and fails
+# only on the empty name — so the failure that started this was about the name,
+# and the email would have been a machine-local value nobody can attribute.
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -91,5 +93,14 @@ while [ "$i" -lt "$n" ]; do
   i=$((i + 1))
 done
 git tag -a "$tag" "$target" "$@"
-git push origin "$tag"
+
+# If the push loses a race the tag still exists locally, and a later
+# `git fetch --tags` would refuse to clobber it — so a caller retrying
+# allocation would fetch, fail, and never reallocate. Remove what we created
+# before reporting the failure, leaving the checkout as we found it.
+if ! git push origin "$tag"; then
+  git tag -d "$tag" >/dev/null
+  echo "tag.sh: push of $tag was rejected; removed the local tag" >&2
+  exit 1
+fi
 echo "tag.sh: tagged $tag at $(git rev-parse --short "$target")"
