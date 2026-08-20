@@ -14,8 +14,13 @@ on:
 permissions:
   contents: write   # create the tag
 
+# One group for the whole workflow, not one per commit. Keyed by SHA, two green
+# commits could run at once, both compute the same next candidate number before
+# either pushed it, and the loser's push would fail — leaving that commit with no
+# candidate at all, which AC8 requires it to have. Candidate numbers are
+# allocated by reading the tags that exist, so allocation has to be serial.
 concurrency:
-  group: rc-${{ github.event.workflow_run.head_sha }}
+  group: release-candidate
   cancel-in-progress: false
 
 jobs:

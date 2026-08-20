@@ -52,7 +52,14 @@ if git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
   kind=$(git cat-file -t "refs/tags/$tag" 2>/dev/null || echo unknown)
 
   if [ "$retry_same_commit" = 1 ] && [ "$existing" = "$wanted" ] && [ "$kind" = tag ]; then
-    echo "tag.sh: $tag already points at $(git rev-parse --short "$wanted"); nothing to do"
+    # Local presence is not publication. If an earlier run created this tag and
+    # then failed to push, returning here would report a candidate that origin
+    # has never seen — the same "succeeded without publishing" failure the
+    # annotated-tag check above prevents. Pushing is idempotent: an up-to-date
+    # remote succeeds, a missing tag is published, and a remote tag on another
+    # commit fails, which is correct.
+    echo "tag.sh: $tag already points at $(git rev-parse --short "$wanted"); ensuring origin has it"
+    git push origin "$tag"
     exit 0
   fi
 

@@ -151,11 +151,15 @@ func TestTagScriptRetryIsIdempotentForTheSameCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retry for the same commit must succeed, got %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "nothing to do") {
-		t.Errorf("expected a no-op, got: %s", out)
-	}
+	// Asserting behaviour rather than wording: the tag must not move, and must
+	// be on origin. An earlier version of this test matched the message text and
+	// broke when the message changed, which tested the string and not the
+	// property.
 	if got := tagTarget(t, dir, "v0.1.0-rc.1"); got != second {
 		t.Errorf("tag moved to %s, want %s", got, second)
+	}
+	if pushedTag(t, dir, "v0.1.0-rc.1") == "" {
+		t.Error("retry left origin without the candidate")
 	}
 }
 
@@ -291,5 +295,39 @@ func TestTagScriptRefusesRetryOnALightweightTag(t *testing.T) {
 	}
 	if !strings.Contains(out, "not an annotated tag") {
 		t.Errorf("the error must say why, got: %s", out)
+	}
+}
+
+// A tag created locally by an earlier run that failed to push is not a published
+// candidate. Retrying must reconcile the remote rather than reporting success on
+// the strength of the local ref alone.
+func TestTagScriptRetryPushesATagTheRemoteNeverGot(t *testing.T) {
+	dir, _, second := tagRepo(t)
+
+	// Simulate the earlier run: annotated tag created, push never happened.
+	for _, args := range [][]string{
+		{"config", "user.name", "github-actions[bot]"},
+		{"config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"},
+		{"tag", "-a", "v0.1.0-rc.1", "-m", "candidate"},
+	} {
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if pushedTag(t, dir, "v0.1.0-rc.1") != "" {
+		t.Fatal("precondition: the tag must not be on origin yet")
+	}
+
+	out, err := runTag(t, dir, "--retry-same-commit", "v0.1.0-rc.1", "HEAD", "candidate")
+	if err != nil {
+		t.Fatalf("retry should reconcile the remote, got %v\n%s", err, out)
+	}
+	if pushedTag(t, dir, "v0.1.0-rc.1") == "" {
+		t.Error("retry returned success while origin still has no candidate")
+	}
+	if got := tagTarget(t, dir, "v0.1.0-rc.1"); got != second {
+		t.Errorf("tag moved to %s, want %s", got, second)
 	}
 }
