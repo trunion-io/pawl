@@ -86,12 +86,12 @@ as MAJOR.
 `checkable: no` — whether a change alters a meaning is a review judgement and
 nothing in the tree can decide it. Recorded as unchecked rather than as
 `partially`, because a partial criterion with no check behind it is a permanent
-tax on attention dressed as coverage. AC10 gives the mechanically enforceable
-half its own criterion.
+tax on attention dressed as coverage. AC3 and AC9 are what a machine enforces
+around it: the bump a commit's type implies, and where a tag may point.
 
-**AC2** — The system shall treat an addition that does not alter existing
-behaviour as MINOR, and a correction of behaviour to its documented or intended
-outcome as PATCH.
+**AC2** — The system shall treat a backward-compatible addition to the
+command-line surface as MINOR, and a correction that brings behaviour back to
+its already-published meaning as PATCH.
 `checkable: no` — same reasoning as AC1. AC3 is what a machine enforces.
 
 **AC3** — The system shall compute the version bump as follows, highest wins:
@@ -101,10 +101,17 @@ outcome as PATCH.
 | `!` or `BREAKING CHANGE` | MAJOR |
 | any `feat` | MINOR |
 | any `fix`, `perf` | PATCH |
+| any `revert` | the bump of the change it reverts, or PATCH if that is not stated |
 | only `docs`, `test`, `ci`, `build`, `chore`, `refactor`, `style` | none |
 
 `checkable: yes` (once built) — `Verdict-Affecting` no longer appears. It ceases
 to be a version input and becomes a disclosure input (AC5).
+>
+> `revert` was accepted by commitlint and by `KnownType` and had no row here, so
+> the implementation maps it to no bump — a revert of a breaking change currently
+> produces nothing to release. It cannot be derived mechanically, because the
+> bump depends on what was reverted; the commit states it, and PATCH is the
+> floor when it does not.
 
 **AC4** — The system shall apply the same bump below 1.0 as above it.
 `checkable: yes` (once built) — supersedes PAWL-013 AC5 and PAWL-027 AC14, which
@@ -112,11 +119,16 @@ shifted every bump down so that pre-1.0 could not be used as licence to change
 anything. With MAJOR narrowed by AC1 the shifting no longer buys that, and the
 protection that mattered now lives in AC5 and AC6.
 
-**AC10** — The system shall refuse to publish a release whose computed version is
-MAJOR unless a commit in that release carries `!` or a `BREAKING CHANGE` footer.
-`checkable: yes` (once built) — the enforceable half of AC1. It cannot tell
-whether a meaning changed; it can refuse a major bump nobody declared, which is
-the failure mode a machine can catch.
+**AC10** — The system shall refuse to publish a release whose notes omit a change
+that a commit declared `more-permissive`.
+`checkable: yes` (once built) — the enforceable half of AC6, not of AC1.
+>
+> An earlier draft made this "refuse a MAJOR release unless a commit carries `!`
+> or `BREAKING CHANGE`", which cannot fail: AC3 produces MAJOR only when one of
+> those markers is present, so the check restated its own precondition. It was
+> written to discharge a `checkable: partially` and discharged nothing — a check
+> that cannot fail is the thing this repository exists to refuse, and it took a
+> review to notice I had written one.
 
 ## Verdict direction
 
@@ -146,22 +158,33 @@ branch from that version's tag.
 `checkable: no` — whether a client can take the current release is a judgement
 about that client. AC9 is the mechanical rule this permits.
 
-**AC9** — The system shall accept a release tag that is reachable from `main`, or
-reachable from a maintenance branch whose first commit is a released tag; and
-shall reject any other.
-`checkable: yes` (once built) — supersedes PAWL-013 AC1 and AC7, which required
-reachability from `main` without exception. Those criteria and AC7 above cannot
-both hold, and this is the rule that replaces them: still refusing a tag from
-nowhere, no longer refusing one from a branch rooted in a release.
+**AC9** — The system shall tag releases `vMAJOR.MINOR.PATCH`; shall accept a tag
+reachable from `main`, or one whose merge-base with `main` is itself a release
+tag; shall reject any other; and shall fail a release built from a tree that is
+not clean.
+`checkable: yes` (once built) — supersedes PAWL-013 AC1 and AC7.
+>
+> Those two carried three requirements between them and an earlier draft replaced
+> only one. The SemVer tag format and the refusal to build from a dirty tree are
+> restated here because superseding a criterion wholesale to change part of it
+> discards the rest silently.
+>
+> "A branch whose first commit is a released tag" was also not decidable: git
+> does not record where a branch began. The merge-base with `main` is a fact git
+> can answer, and it says the same thing for the case AC7 permits.
 
 **AC8** — A backport shall carry a direction declaration classified against the
 branch it lands on.
-`checkable: yes` (once built) — the declaration is required as for any other
-commit; what is specified here is what it is measured against. Copying the
-source commit's answer would be wrong often enough to matter: the same logical
-correction can be stricter relative to one baseline and more permissive relative
-to another, because the branch has drifted. A disclosure computed against the
-wrong baseline is worse than none, since it is believed.
+`checkable: no` — AC5 checks that a declaration is present and well-formed, which
+is a different claim. Whether it was classified against the right baseline needs
+the replay harness this spec puts out of scope, so it is recorded as unchecked
+rather than asserted.
+
+What this criterion fixes is the baseline the declaration is measured against.
+Copying the source commit's answer would be wrong often enough to matter: the
+same logical correction can be stricter relative to one baseline and more
+permissive relative to another, because the branch has drifted. A disclosure
+computed against the wrong baseline is worse than none, since it is believed.
 
 ## Non-functional
 
