@@ -194,15 +194,44 @@ smaller thing than a rename.
 recognise, the system shall fail rather than parse it, and shall say which
 version it found and which it supports.
 `checkable: yes` (once built) — the criterion AC12 depends on. A version field no
-reader enforces cannot protect anything, and the protection has to ship *before*
-records carrying the new version are written, not alongside them.
+reader enforces cannot protect anything.
+
+**AC15** — The system shall accept every schema version it previously wrote, and
+shall name the supported set rather than a single value.
+`checkable: yes` (once built) — the whole corpus on disk is `0.1`, including this
+repository's own claim log and every acknowledgement, whose version AC12 does not
+move. An AC14 implementation that recognises only the current version would make
+its first release reject the records pawl itself wrote, turning a compatibility
+guard into a data-loss event. Fail-closed on *unrecognised*, not on *not-latest*.
+
+**AC16** — The system shall refuse to write `schema_version` `0.2` unless the
+previous released tag already contains the AC14 reader, and shall say which
+release is missing it.
+`checkable: yes` (once built) — stated as a property of a tree and its tag
+history rather than of a release process, which is what makes it testable at all:
+a test builds a real repository with a previous tag lacking the reader and
+asserts the write is refused, in the shape `internal/e2e/tagscript_test.go`
+already uses. [`PAWL-013`](./PAWL-013-versioning-and-release.md) owns the release
+pipeline this runs inside; it does not own this criterion.
 >
-> Ordering matters and is not free. Every binary in the field predates AC14, so
-> those readers are fail-open whatever this spec says — the guarantee starts at
-> the first release carrying AC14 and covers only readers from that release
-> onward. Deployments must take that release before any producer writes `0.2`.
-> Stating this is the honest version; claiming the bump protects existing
-> installations would not be true.
+> A first draft of this criterion was written `checkable: partially` on the
+> grounds that release ordering is not a property of one checkout, and declared
+> itself closed by a refusal in PAWL-013's workflow that nobody had written.
+> Both halves were wrong in the way this repository keeps finding: a `partially`
+> with the closure asserted rather than built is attention debt with a
+> reassurance attached, and it is what PAWL-022 exists to clean up. Reformulating
+> the requirement over the tag history — which *is* readable from a checkout —
+> makes it an ordinary testable criterion.
+>
+> This is the criterion that makes AC14 mean anything. AC12 mandates writing
+> `0.2` and AC14 mandates the reader that rejects unknown versions; as peer
+> criteria of one deliverable, a single release satisfying both does precisely
+> what AC14 is for, and without AC16 nothing would detect it.
+>
+> What this cannot fix: every binary already in the field predates AC14 and is
+> fail-open whatever this spec says. The guarantee starts at the first release
+> carrying it and covers only readers from that release onward. Claiming the bump
+> protects existing installations would not be true.
 
 ## Non-functional
 

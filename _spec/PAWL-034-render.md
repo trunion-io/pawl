@@ -42,7 +42,9 @@ markdown as its only output.
 
 **AC2** — The renderer shall not read the working tree, invoke git, open a network
 connection, or call a model.
-`checkable: yes` (once built) — closed by AC3, which is what actually decides it.
+`checkable: yes` (once built) — closed by AC3 and AC12 together: AC3 denies the
+renderer the capability through its own imports, AC12 denies a caller the ability
+to hand it in.
 >
 > Rendering successfully outside a repository does not establish this on its own,
 > which an earlier draft claimed it did. `git --version` succeeds anywhere, a
@@ -75,14 +77,34 @@ from AC2 and fails independently.
 > line above saying AC3 decides it — and specified no check for the runtime half
 > it invented. Review caught the pair.
 >
-> The transitive formulation is what resolves it. A runtime call still needs the
-> package in the binary, and a package not in the transitive import graph is not
-> in the binary; there is no indirect route to a capability that was never
-> linked. So closing the graph over `net/http`, `net`, `os/exec` and everything
-> reaching them closes AC2 completely rather than partially, and no separate
-> runtime check is owed. The residual risk is `unsafe` or a linker directive
-> reaching a symbol the graph does not show, which is not a thing this renderer
-> does and would be visible in review if it started.
+> A first correction went too far the other way, claiming the transitive
+> formulation closed AC2 completely because "a package not in the transitive
+> import graph is not in the binary". That conflates `internal/render`'s graph
+> with the binary's. `os/exec` is already linked into `cmd/pawl` through
+> `internal/gitutil` and `internal/harness`, and this spec's Module line names
+> `internal/cli` as the caller — so a callback, an `io.Writer` or any interface
+> value handed in from `cli` reaches git or the network at runtime while
+> `internal/render`'s own graph stays clean. Deleting the runtime sentence left
+> nothing covering that.
+>
+> What AC3 actually decides is the renderer's *own* capability: it cannot reach
+> a repository, a socket or a subprocess through code it imports. The remaining
+> route is behaviour passed in, and AC12 closes that by constraining the seam
+> rather than by inspecting a graph. AC2 is closed by AC3 and AC12 together, and
+> by neither alone.
+
+**AC12** — The renderer's entry point shall take the verdict record as a
+concrete value and return the document as a string or byte slice, accepting no
+interface, function or channel parameter through which a caller could supply
+behaviour.
+`checkable: yes` (once built) — over the exported signature, which is where the
+injected-behaviour route is opened or closed. AC3 constrains what the renderer
+can reach on its own; this constrains what a caller can hand it. Without both,
+the trust inversion AC2 exists to protect survives a clean import graph.
+>
+> The residual risk after both is `unsafe` or a linker directive reaching a
+> symbol neither check sees, which is not a thing this renderer does and would be
+> visible in review if it started.
 
 **AC4** — The renderer shall produce byte-identical output for repeated
 invocations on one record.

@@ -77,6 +77,10 @@ func TestRecordingAReviewDoesNotOverwriteTheMechanicalVerdict(t *testing.T) {
 		t.Fatalf("RecordVerdict: %v", err)
 	}
 
+	if len(s.Spans) != 2 {
+		t.Fatalf("sampled %d spans, want 2", len(s.Spans))
+	}
+
 	sp := s.Spans[0]
 	if sp.Verdict != model.VerdictClear {
 		t.Errorf("recording a review changed the mechanical verdict to %q; C-10 requires it unchanged", sp.Verdict)
