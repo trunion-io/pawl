@@ -21,15 +21,18 @@ converging. Two of the round-five defects were created while fixing round three.
 Reading them together, they are not twelve unrelated mistakes and then six more.
 Five shapes repeat:
 
-| Shape | Roughly | Example |
-|---|---|---|
-| One fact recorded in several places, changed in one | 8 | the index said nine superseded criteria while the spec said ten |
-| Prose asserting more than the criteria establish | 7 | "a new major every few days", from one instance |
-| One criterion carrying a decidable half and an undecidable one | 3 | AC5, AC8, AC10 |
-| A criterion superseded without tracing what depended on it | 4 | AC3's obligation survived only as AC5's proxy |
-| A rule with no stated mechanism | 3 | "newest", "states the bump" |
+| Shape | Roughly | Example | Machine-checkable |
+|---|---|---|---|
+| One fact recorded in several places, changed in one | 8 | the index said nine superseded criteria while the spec said ten | yes |
+| Prose asserting more than the criteria establish | 7 | "a new major every few days", from one instance | no |
+| One criterion carrying a decidable half and an undecidable one | 3 | PAWL-029 AC5, AC8, AC10 | no |
+| A criterion superseded without tracing what depended on it | 4 | AC3's obligation survived only as AC5's proxy | no |
+| A rule with no stated mechanism | 3 | "newest", "states the bump" | partly |
 
-The first, third and fifth are mechanical. The repository has twice built a test
+Only the first is fully mechanical, and part of the fifth. Deciding whether a
+criterion bundles two requirements is reading, which AC8 says plainly — an
+earlier draft of this table called that shape mechanical and contradicted its own
+criterion two pages later. The repository has twice built a test
 whose only job is to hold two copies of one fact together —
 `TestGoTypesMatchCommitlintConfig` and `TestRCChecksMatchRuleset` — and both
 exist because those copies had already drifted. Specs have no such check, and one
@@ -47,67 +50,113 @@ once: PAWL-024, PAWL-025 and PAWL-027 each describe PAWL-013 as *delivered,
 immutable*, while PAWL-013's own status line says `DRAFTED, NOT BUILT`. Every
 reader who relied on that was told a spec was frozen when it was not.
 
+## The declarations these checks read
+
+A check comparing two copies of a fact needs to know which text carries it.
+An earlier draft specified the comparisons and not the grammar, so an
+implementation could not have told a supersession table from a sentence about
+one. Three forms are fixed here, and nothing outside them is read.
+
+**A supersession table** — a Markdown table immediately under a line reading
+exactly `**Supersedes by reference:**`, whose first column holds entries of the
+form `` PAWL-0NN **ACn** `` or `` PAWL-0NN **ACn**, **ACm** ``. Prose mentioning a
+superseded criterion is not a declaration.
+
+**A status annotation** — a parenthesis immediately after a spec link, holding
+one of `drafted`, `built` or `delivered`, optionally followed by `, immutable`.
+
+**A status line** — the `**Status:**` line of a spec, whose status is the text up
+to the first `·`, matched case-insensitively against an annotation after
+mapping `DRAFTED, NOT BUILT` to `drafted`.
+
 ## Criteria a machine decides
 
-**AC1** — Where a spec names a criterion in another spec, the system shall verify
-that criterion exists.
-`checkable: yes` (once built) — a supersession table naming an AC that was
-renumbered or never existed reads as a change nobody made.
-
-**AC2** — The system shall verify that a spec's index entry names the same set of
-superseded criteria as that spec declares.
-`checkable: yes` (once built) — the index is a second copy of that set and drifted
-from it within one commit.
-
-**AC3** — Where a spec describes another spec's status, the system shall verify
-the description matches that spec's status line.
-`checkable: yes` (once built) — three specs assert PAWL-013 is delivered today and
-it is not.
-
-**AC4** — The system shall verify that every criterion marked `checkable:
-partially` names the check that closes it.
-`checkable: yes` (once built) — the rule exists in `CLAUDE.md` and has been broken
-once already, by a spec written after it.
-
-**AC5** — The system shall verify that criterion identifiers are unique within a
-spec and that every internal reference resolves.
+**AC1** — Where a supersession table names a criterion in another spec, the
+system shall verify that criterion exists in that spec.
 `checkable: yes` (once built)
 
-**AC6** — The system shall verify that every file in `_spec/` has an index entry
-and every index entry names a file that exists.
+**AC2** — Where a supersession table names a spec that is not present, the system
+shall report the reference as unresolvable and fail.
+`checkable: yes` (once built) — silently passing a reference to something absent
+would make the check weakest exactly when a spec is mid-flight. This spec is that
+case: it cites PAWL-029, which is on an unmerged branch, so landing these checks
+before PAWL-029 fails on this file. The order is therefore PAWL-029 first.
+
+**AC3** — The system shall verify that a spec's index entry names the same set of
+superseded criteria as that spec's supersession table.
 `checkable: yes` (once built)
 
-**AC7** — The system shall run these checks as part of the check suite.
+**AC4** — The system shall verify that a status annotation matches the status line
+of the spec it annotates.
+`checkable: yes` (once built) — four specs fail this today. PAWL-024, PAWL-025 and
+PAWL-027 call PAWL-013 delivered, and PAWL-028 calls PAWL-019 delivered; both
+targets say `DRAFTED, NOT BUILT`.
+
+**AC5** — The system shall verify that a criterion introduced by a changeset and
+marked `checkable: partially` names the check that closes it, or names the spec
+that closes it.
+`checkable: yes` (once built) — scoped to criteria the changeset introduces, and
+allowing an external closure, because neither is optional. `PAWL-001 AC2` and
+others are `partially` with their closures recorded in PAWL-022, which exists
+precisely because a delivered spec cannot be edited to record its own. A global
+rule would demand rewriting immutable specs to satisfy a linter.
+
+**AC6** — The system shall verify that criterion identifiers are unique within a
+spec.
+`checkable: yes` (once built)
+
+**AC7** — The system shall verify that a criterion reference within a spec
+resolves to a criterion in that spec.
+`checkable: yes` (once built) — separated from AC6 because they fail
+independently and AC10 asks for one requirement per criterion. The earlier draft
+bundled them, in the spec that introduces the rule against bundling.
+
+**AC8** — The system shall verify that every numbered spec file has an index entry
+and that every index entry names a file that exists.
+`checkable: yes` (once built) — numbered files only. `README.md` is the index and
+`constitution.md` is not a numbered spec; a rule over every file in `_spec/` would
+fail on both and demand the index index itself.
+
+**AC9** — The system shall run these checks as part of the check suite.
 `checkable: yes` (once built) — a consistency check nobody runs is a second copy
 of the problem.
 
 ## Criteria a reader decides
 
-**AC8** — A criterion shall state one requirement; where part is mechanically
+**AC10** — A criterion shall state one requirement; where part is mechanically
 decidable and part is not, they shall be separate criteria.
 `checkable: no` — deciding whether a sentence contains two requirements is
 reading. Recorded as unchecked rather than `partially`, because a partial with no
 check is the tax AC4 exists to stop.
 
-> This is the shape that produced AC5, AC8 and AC10 in PAWL-029: each bundled a
+> This is the shape that produced AC5, AC8 and AC10 in PAWL-029 — and AC6 here,
+> which bundled identifier uniqueness with reference resolution until a review
+> pointed out that the spec introducing this rule had broken it. Each bundled a
 > trigger a machine can evaluate with a judgement it cannot, under one
 > `checkable: yes`. Split, each half can be labelled honestly. Bundled, the
 > criterion claims verification it does not have.
 
-**AC9** — A spec's prose shall not assert more than its criteria and its recorded
-claims establish.
-`checkable: no` — and this one is worth naming precisely because it cannot be
-automated. Four of round one's findings were places where the claims recorded
-against the draft already said what the prose did not: the claim was honest and
-the sentence above it was not. The accounting was doing its job and nobody read
-it back.
+**AC11** — A spec's prose shall not contradict the recorded state of a claim
+covering the same span.
+`checkable: no` — and the wording matters. An earlier draft said prose must not
+assert more than "its criteria and its recorded claims establish", which makes a
+claim into support for the sentence above it. A claim establishes nothing by
+existing: C-1 requires named evidence that was found and passed, and a claim may
+be `undetermined`, which records that nothing was established at all. Treating an
+unverified claim as backing for stronger prose is the failure this product
+refuses, written into the spec meant to catch it.
+
+> What can be read for is contradiction. Four of round one's findings on PAWL-029
+> were places where a claim said "not measured" and the paragraph above it stated
+> a rate. The accounting was doing its job; nobody read it back.
 
 ## Non-functional
 
-- **This does not make specs correct.** It makes a class of them mechanically
-  wrong-detectable, which is a smaller claim. Consequence blindness and
-  overclaiming both need a reader, and two of the five shapes above are untouched
-  by everything in this spec.
+- **This does not make specs correct.** It makes one shape mechanically
+  wrong-detectable, and part of another. AC10 and AC11 address bundling and
+  overclaiming as things a reader decides, so those are not untouched — what is
+  true is that no machine check here covers them. Consequence blindness is the
+  one shape nothing in this spec addresses at all.
 - **The checks must be cheap enough to run every time.** `make check` is seven and
   a half seconds cold; a spec linter that doubles that will be moved to a nightly
   job and stop being a gate.
@@ -120,6 +169,8 @@ it back.
 - **Spec content, style or length.** Nothing here reads a criterion for sense.
 - **Enforcing "spec first".** Whether a change has a criterion behind it is not
   decidable from the tree; the hook and review carry it.
-- **Correcting the three specs that misdescribe PAWL-013's status.** AC3 makes
-  them detectable; fixing them is a separate change, and PAWL-024, PAWL-025 and
-  PAWL-027 are built rather than delivered, so amending them is permitted.
+- **Correcting the four specs that misdescribe another spec's status.** AC4 makes
+  them detectable. PAWL-024, PAWL-025 and PAWL-027 call PAWL-013 delivered;
+  PAWL-028 calls PAWL-019 delivered; both targets say `DRAFTED, NOT BUILT`. All
+  four are built rather than delivered, so amending them is permitted, and it is
+  a separate change.
