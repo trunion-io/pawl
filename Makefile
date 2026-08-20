@@ -149,5 +149,7 @@ check-tagger: ## Lint: no workflow writes a tag directly
 		exit 1; \
 	fi; \
 	[ -x .github/scripts/tag.sh ] || { echo "check-tagger: FAIL — .github/scripts/tag.sh is missing or not executable"; exit 1; }; \
-	echo "check-tagger: ok — no workflow writes a tag directly (lint; behaviour covered by TestTagScript*)"
+	echo "check-tagger: ok — no direct tag write detected by this lint"; \
+	echo "              (indirection and YAML folding are not detectable here;"; \
+	echo "               the behaviour is established by TestTagScript*)"
 .PHONY: check-tagger

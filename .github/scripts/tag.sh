@@ -45,9 +45,21 @@ if git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
   existing=$(git rev-parse "refs/tags/$tag^{commit}")
   wanted=$(git rev-parse "$target^{commit}")
 
-  if [ "$retry_same_commit" = 1 ] && [ "$existing" = "$wanted" ]; then
+  # Same commit is not sufficient: a lightweight tag points at the right commit
+  # while carrying no annotation and no tagger, which is the defect this script
+  # exists to prevent. Taking the no-op path there would leave it in place and
+  # report success.
+  kind=$(git cat-file -t "refs/tags/$tag" 2>/dev/null || echo unknown)
+
+  if [ "$retry_same_commit" = 1 ] && [ "$existing" = "$wanted" ] && [ "$kind" = tag ]; then
     echo "tag.sh: $tag already points at $(git rev-parse --short "$wanted"); nothing to do"
     exit 0
+  fi
+
+  if [ "$retry_same_commit" = 1 ] && [ "$existing" = "$wanted" ] && [ "$kind" != tag ]; then
+    echo "tag.sh: $tag exists at the right commit but is $kind, not an annotated tag" >&2
+    echo "        refusing to treat it as a completed candidate" >&2
+    exit 1
   fi
 
   echo "tag.sh: $tag already exists" >&2

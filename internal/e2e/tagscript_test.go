@@ -272,3 +272,24 @@ func TestRCReusesTheCandidateForTheSameCommit(t *testing.T) {
 		t.Errorf("a new commit must get a new candidate, got %+v", third)
 	}
 }
+
+// A lightweight tag points at the right commit while carrying no annotation and
+// no tagger — the exact defect this script exists to prevent. Retry mode must
+// not accept one as a completed candidate.
+func TestTagScriptRefusesRetryOnALightweightTag(t *testing.T) {
+	dir, _, _ := tagRepo(t)
+
+	lw := exec.Command("git", "tag", "v0.1.0-rc.1")
+	lw.Dir = dir
+	if out, err := lw.CombinedOutput(); err != nil {
+		t.Fatalf("creating a lightweight tag: %v\n%s", err, out)
+	}
+
+	out, err := runTag(t, dir, "--retry-same-commit", "v0.1.0-rc.1", "HEAD", "candidate")
+	if err == nil {
+		t.Fatalf("expected refusal for a lightweight tag, got success:\n%s", out)
+	}
+	if !strings.Contains(out, "not an annotated tag") {
+		t.Errorf("the error must say why, got: %s", out)
+	}
+}
