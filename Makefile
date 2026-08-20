@@ -101,30 +101,42 @@ check-pins: ## PAWL-025 AC1 — every GitHub Action pinned to an immutable commi
 		exit 1; \
 	fi; \
 	echo "check-pins: ok — $$(printf '%s\n' "$$refs" | grep -c . ) actions pinned to commits"
+.PHONY: check-pins
 
 fuzz: ## PAWL-025 AC8 — exercise the parsers that read input we did not produce
 	go test -run=XXX -fuzz=FuzzJUnit      -fuzztime=$(FUZZTIME) ./internal/evidence
 	go test -run=XXX -fuzz=FuzzCoverage   -fuzztime=$(FUZZTIME) ./internal/evidence
 	go test -run=XXX -fuzz=FuzzTypecheck  -fuzztime=$(FUZZTIME) ./internal/evidence
 	go test -run=XXX -fuzz=FuzzRecord     -fuzztime=$(FUZZTIME) ./internal/claimlog
+.PHONY: fuzz
 
 hooks: ## Point git at .githooks (PAWL-027) — one command per clone
 	@git config core.hooksPath .githooks
 	@echo "core.hooksPath = .githooks"
 	@echo "commit-msg validates the message; pre-push runs make check."
 	@echo "Both are bypassable with --no-verify; CI is the enforcement."
+.PHONY: hooks
 
-check-tagger: ## A workflow that writes an annotated tag must configure a tagger
-	@bad=0; \
-	for f in .github/workflows/*.yml; do \
-		grep -q 'git tag -a' "$$f" || continue; \
-		grep -q 'git config user.email' "$$f" || { \
-			echo "  $$f writes an annotated tag but sets no tagger identity"; bad=1; }; \
-	done; \
-	if [ "$$bad" = 1 ]; then \
-		echo "check-tagger: FAIL — an annotated tag records a tagger, and a runner"; \
-		echo "              has none. This failed every release candidate silently"; \
-		echo "              after computing the correct version."; \
+check-tagger: ## Tags are written in one place, and that place sets an identity
+	@# The previous version grepped each workflow for `git tag -a` and for an
+	@# email anywhere in the same file. It passed on a comment, missed
+	@# --annotate and -am, and never looked at .yaml — a check asserting more
+	@# than it established, which is the thing this repository exists to refuse.
+	@#
+	@# Centralising the write makes the invariant exact: no workflow calls git
+	@# tag at all, and the one script that does configures both identity fields.
+	@bad=$$(grep -lE '\bgit[[:space:]]+tag\b' .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true); \
+	if [ -n "$$bad" ]; then \
+		printf '%s\n' "$$bad" | sed 's|^|  writes a tag directly: |'; \
+		echo "check-tagger: FAIL — tags are written by .github/scripts/tag.sh only."; \
+		echo "              An annotated tag records a tagger and a runner has none,"; \
+		echo "              which failed every release candidate silently."; \
 		exit 1; \
 	fi; \
-	echo "check-tagger: ok"
+	[ -x .github/scripts/tag.sh ] || { echo "check-tagger: FAIL — .github/scripts/tag.sh is missing or not executable"; exit 1; }; \
+	for k in user.name user.email; do \
+		grep -q "git config $$k" .github/scripts/tag.sh || { \
+			echo "check-tagger: FAIL — tag.sh does not set $$k; git requires both"; exit 1; }; \
+	done; \
+	echo "check-tagger: ok — tags written only by .github/scripts/tag.sh"
+.PHONY: check-tagger

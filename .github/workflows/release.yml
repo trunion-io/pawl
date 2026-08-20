@@ -64,20 +64,14 @@ jobs:
           echo "unconventional commits skipped: ${{ steps.v.outputs.unconventional }}"
           exit 1
 
-      - name: Configure the tagger
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
       # AC15 is enforced in the tool, which refuses to compute a version that
-      # already exists as a tag.
+      # already exists as a tag. The tagger identity is configured inside the
+      # script, which is the only place a tag is written — see check-tagger.
       - name: Tag the release
         run: |
-          set -euo pipefail
-          git tag -a "${{ steps.v.outputs.tag }}" \
-            -m "${{ steps.v.outputs.tag }}" \
-            -m "Bump: ${{ steps.v.outputs.bump }} from ${{ steps.v.outputs.previous }}"
-          git push origin "${{ steps.v.outputs.tag }}"
+          .github/scripts/tag.sh "${{ steps.v.outputs.tag }}" "$GITHUB_SHA" \
+            "${{ steps.v.outputs.tag }}" \
+            "Bump: ${{ steps.v.outputs.bump }} from ${{ steps.v.outputs.previous }}"
 
       - name: Check
         run: make check

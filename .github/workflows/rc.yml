@@ -84,22 +84,9 @@ jobs:
           TAG: ${{ steps.v.outputs.tag }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          set -euo pipefail
-          # An annotated tag records a tagger, and a runner has no identity
-          # configured. release.yml sets this and rc.yml did not, so every
-          # candidate failed at the tag write after computing the right version.
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            echo "$TAG already exists; nothing to do"
-            exit 0
-          fi
-          git tag -a "$TAG" "$SHA" -m "Release candidate $TAG
-
-          Bump: ${{ steps.v.outputs.bump }} from ${{ steps.v.outputs.previous }}
-          Commits since last release: ${{ steps.v.outputs.commits }}"
-          git push origin "$TAG"
-          echo "tagged $TAG"
+          .github/scripts/tag.sh "$TAG" "$SHA" \
+            "Release candidate $TAG" \
+            "Bump: ${{ steps.v.outputs.bump }} from ${{ steps.v.outputs.previous }}, ${{ steps.v.outputs.commits }} commits since the last release"
 
       - name: Report
         if: steps.gate.outputs.ready == 'true' && steps.v.outputs.release != 'true'
