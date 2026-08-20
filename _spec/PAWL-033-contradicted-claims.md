@@ -127,6 +127,7 @@ each.
 contract reference and reason intact.
 `checkable: yes` (once built)
 
+
 **AC10** — Where a claim carries a kind the system does not recognise, the system
 shall fail rather than treat the claim as absent or unverified.
 `checkable: yes` (once built) — C-3. An unreadable record is not an empty one.
@@ -137,6 +138,14 @@ name.
 `checkable: yes` (once built) — scoped to the shapes the suite exercises, which
 is what a test can establish. Stating it over *all* possible verifier inputs
 would be a criterion no run could satisfy.
+
+**AC12** — The system shall raise the predicate `schemaVersion` to `0.3` and shall
+leave the predicate type URL unchanged.
+`checkable: yes` (once built) — the mechanism PAWL-011 built for this. AC5 there
+raised `schemaVersion` to `0.2` for an additive change while holding the URL
+fixed, because the URL describes the artifact rather than the tool; it survived
+the `factory-kit` → `pawl` rename on that reasoning and an added enum value is a
+smaller thing than a rename.
 
 ## Non-functional
 
@@ -158,13 +167,22 @@ would be a criterion no run could satisfy.
 
 ## Open decisions
 
-**DECISION-1 — predicate version.** Adding a value to a state enum is additive
-for a tolerant consumer and breaking for a strict one. The predicate type URL
-`https://trunion.io/attestations/assumption-trail/v0.1` describes the artifact
-rather than the tool and must not change for cosmetic reasons — but a state a
-consumer cannot interpret is not cosmetic. Either the URL bumps to `v0.2`, or
-`v0.1` is documented as requiring consumers to ignore unrecognised state values.
-**Rich decides. No code past this point.**
+**DECISION-1 — resolved: raise `schemaVersion`.** The predicate carries
+`schemaVersion`, currently `0.2` in `internal/model`, and PAWL-011 AC5 raised it
+to that value for exactly this kind of change while holding the type URL fixed.
+Adding `contradicted` raises it to `0.3`. The type URL
+`https://trunion.io/attestations/assumption-trail/v0.1` does not move, because
+PAWL-011 says it describes the artifact rather than the tool and it survived the
+`factory-kit` → `pawl` rename on that reasoning.
+
+> An earlier draft framed this as a choice between moving the type URL and
+> documenting `v0.1` as requiring tolerant consumers, and a review pointed out
+> that both ignore the mechanism already in the tree. There was no decision to
+> take: the repository had answered this before the question was asked, and the
+> draft proposed changing a URL that PAWL-011 exists to keep still.
+>
+> What a consumer should do on meeting a `schemaVersion` it does not recognise is
+> named as separate in PAWL-011 and stays separate here.
 
 **DECISION-2 — resolved: a fourth kind.** An earlier draft proposed a lifecycle
 state and recorded this as open. Settled in favour of a kind, for the reasons
