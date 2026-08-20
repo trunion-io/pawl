@@ -132,11 +132,23 @@ and our model of it. A mock would have hidden all three.
 
 ## C-10 — Lifecycle state and sample verdict are distinct axes
 
-The system shall represent the lifecycle state of a claim and the calibration
-sample verdict of a claim as two separate fields, and shall derive neither from
-the other.
+The system shall represent the mechanical resolution of a claimed span and the
+calibration sample verdict of that span as two separate fields, and shall derive
+neither from the other.
 
-`checkable: yes` — a record carrying one where the other belongs is detectable.
+**checkable:** partially — no automated check exists. Enforced by review.
+
+> An earlier draft said "the lifecycle state of a claim", made the rule
+> `checkable: yes` with no test named, and bound both immediately. All three were
+> wrong. `Claim` has no lifecycle-state field and gains none — `contradicted` is a
+> kind (PAWL-033) — so the rule would have bound something that does not exist,
+> and this file's own convention is that `checkable: yes` names the test, as C-1,
+> C-3 and C-4 all do.
+>
+> Restated over what is already there: `ResolvedClaim.Coverage` and `SpanVerdict`
+> carry the mechanical resolution, PAWL-007 records the sample verdict, and the
+> rule is that those must not collapse into one another. That binds today and is
+> already satisfied.
 
 **Lifecycle state** is what the tool knows about a claim within one changeset:
 emitted at edit time or resolved mechanically at verification time. It is a

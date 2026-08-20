@@ -5,7 +5,7 @@
 changes what a claim can record, not how or when it is recorded.
 **Related:** [PAWL-003](./PAWL-003-coverage-resolution.md),
 [PAWL-006](./PAWL-006-policy-gate.md), [PAWL-007](./PAWL-007-calibration-sampler.md)
-(drafted), and constitution **C-10**.
+(built), and constitution **C-10**.
 
 ## Stakeholders
 
@@ -140,9 +140,17 @@ would be a criterion no run could satisfy.
 
 ## Non-functional
 
-- **Lifecycle state is not sample verdict.** C-10 binds. A contradicted claim
-  remains samplable and may be labelled `immaterial` — the contract was wrong and
-  it did not matter — and the dataset has to be able to say so.
+- **A contradicted claim is not sampled, and this spec does not change that.** An
+  earlier draft said it remained samplable and could be labelled `immaterial`.
+  Both halves were wrong. PAWL-007 AC1 selects *cleared* changesets, and AC4 below
+  makes a changeset carrying a contradiction fail, so it never enters the sampled
+  population. And `immaterial` is from the four-value proposal PAWL-007 explicitly
+  rejected for conflating its two axes.
+>
+  Whether contradictions should be sampled at all is a real question — a
+  contradiction that turns out to be the agent misreading the contract is exactly
+  the error rate worth knowing — but answering it means extending PAWL-007's
+  population and taxonomy, which is that spec's to do and not this one's.
 - **The signal is worth more than the gate behaviour.** Everything above stops a
   merge. None of it moves the contradiction to whoever can act on it, and until
   something does, the value here is that the record exists and is not lost in

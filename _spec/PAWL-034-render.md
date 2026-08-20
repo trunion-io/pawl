@@ -42,8 +42,22 @@ markdown as its only output.
 
 **AC2** — The renderer shall not read the working tree, invoke git, open a network
 connection, or call a model.
-`checkable: yes` (once built) — asserted by rendering successfully in a directory
-that is not a repository and contains no project files.
+`checkable: partially` — closed in the same changeset by AC3 over the import
+graph, plus a test rendering in a directory that is neither a repository nor
+contains project files.
+>
+> Rendering successfully outside a repository does not establish this on its own,
+> which an earlier draft claimed it did. `git --version` succeeds anywhere, a
+> failed repository command whose error is discarded leaves no trace, and neither
+> a network call nor a model call is prevented by the absence of a `.git`
+> directory. The scenario shows the renderer does not *depend* on a repository; it
+> cannot show nothing was invoked.
+>
+> What each half establishes: AC3 catches a dependency that could reach any of
+> them, and the scenario catches a renderer that silently needs a tree. Between
+> them the failure has to be a runtime call through an interface the module
+> already imports for another reason, which is narrow enough to name rather than
+> claim closed.
 
 > **AC2 is the whole spec and every other criterion is a consequence.** If the
 > renderer can reach the repository, someone will add a section summarising the
