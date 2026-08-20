@@ -47,7 +47,7 @@ vet:
 	go vet ./...
 
 .PHONY: check
-check: fmt vet test check-pins ## What CI runs
+check: fmt vet test check-pins check-tagger ## What CI runs
 
 .PHONY: dist
 FUZZTIME ?= 30s
@@ -113,3 +113,18 @@ hooks: ## Point git at .githooks (PAWL-027) — one command per clone
 	@echo "core.hooksPath = .githooks"
 	@echo "commit-msg validates the message; pre-push runs make check."
 	@echo "Both are bypassable with --no-verify; CI is the enforcement."
+
+check-tagger: ## A workflow that writes an annotated tag must configure a tagger
+	@bad=0; \
+	for f in .github/workflows/*.yml; do \
+		grep -q 'git tag -a' "$$f" || continue; \
+		grep -q 'git config user.email' "$$f" || { \
+			echo "  $$f writes an annotated tag but sets no tagger identity"; bad=1; }; \
+	done; \
+	if [ "$$bad" = 1 ]; then \
+		echo "check-tagger: FAIL — an annotated tag records a tagger, and a runner"; \
+		echo "              has none. This failed every release candidate silently"; \
+		echo "              after computing the correct version."; \
+		exit 1; \
+	fi; \
+	echo "check-tagger: ok"
