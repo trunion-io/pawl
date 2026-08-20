@@ -138,10 +138,16 @@ that a commit declared `more-permissive`.
 > that cannot fail is the thing this repository exists to refuse, and it took a
 > review to notice I had written one.
 
-**AC11** — The system shall compute a release from the newest release tag
+**AC11** — The system shall compute a release from the highest SemVer release tag
 reachable from the commit being released, and from the commits since it.
 `checkable: yes` (once built) — supersedes PAWL-027 AC12, which said "the
 previous release tag" and left which one unspecified.
+>
+> "Newest" was the first correction and was still ambiguous: it can mean highest
+> SemVer, nearest ancestor, or latest tag date, and two implementations could
+> pick different ranges while both claiming compliance. Highest SemVer matches
+> what the delivered code already does with `--sort=-v:refname`; the defect was
+> never the ordering, only that it ignored reachability.
 >
 > Without this, AC7 and AC9 permit a maintenance branch that cannot produce a
 > correct version. The delivered implementation lists tags with
@@ -149,6 +155,9 @@ previous release tag" and left which one unspecified.
 > branch from `v1.0.0` with `v2.0.0` on `main` computes against `v2.0.0` and
 > cannot produce `v1.0.1`. Permitting the branch while leaving the version
 > computation unable to serve it would have been a backport path in name only.
+>
+> Reachability is the whole of the change: order by version as now, but only over
+> tags an ancestor of the release commit carries.
 
 ## Verdict direction
 
