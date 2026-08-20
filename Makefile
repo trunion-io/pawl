@@ -117,26 +117,26 @@ hooks: ## Point git at .githooks (PAWL-027) — one command per clone
 	@echo "Both are bypassable with --no-verify; CI is the enforcement."
 .PHONY: hooks
 
-check-tagger: ## Tags are written in one place, and that place sets an identity
-	@# The previous version grepped each workflow for `git tag -a` and for an
-	@# email anywhere in the same file. It passed on a comment, missed
-	@# --annotate and -am, and never looked at .yaml — a check asserting more
-	@# than it established, which is the thing this repository exists to refuse.
+check-tagger: ## Lint: no workflow writes a tag directly
+	@# A lint, and only a lint. It greps for a git invocation reaching `tag`,
+	@# which catches every realistic form including `git -c k=v tag` and an
+	@# absolute path — but a grep is not a shell parser and never will be, so
+	@# indirection like `g=git; $$g tag` passes it.
 	@#
-	@# Centralising the write makes the invariant exact: no workflow calls git
-	@# tag at all, and the one script that does configures both identity fields.
-	@bad=$$(grep -lE '\bgit[[:space:]]+tag\b' .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true); \
+	@# What actually guarantees the behaviour is TestTagScript* in internal/e2e:
+	@# real git, a real bare remote, identity unset. An earlier version of this
+	@# target also grepped tag.sh for `git config user.name`, which reported ok
+	@# when both lines were commented out — a false assurance standing beside a
+	@# real one. It was removed rather than tightened, because the test already
+	@# establishes the property and this cannot.
+	@bad=$$(grep -lE 'git[^;|&]*[[:space:]]tag([[:space:]]|$$)' \
+		.github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true); \
 	if [ -n "$$bad" ]; then \
 		printf '%s\n' "$$bad" | sed 's|^|  writes a tag directly: |'; \
-		echo "check-tagger: FAIL — tags are written by .github/scripts/tag.sh only."; \
-		echo "              An annotated tag records a tagger and a runner has none,"; \
-		echo "              which failed every release candidate silently."; \
+		echo "check-tagger: FAIL — tags are written by .github/scripts/tag.sh only,"; \
+		echo "              which is the one place that configures a tagger."; \
 		exit 1; \
 	fi; \
 	[ -x .github/scripts/tag.sh ] || { echo "check-tagger: FAIL — .github/scripts/tag.sh is missing or not executable"; exit 1; }; \
-	for k in user.name user.email; do \
-		grep -q "git config $$k" .github/scripts/tag.sh || { \
-			echo "check-tagger: FAIL — tag.sh does not set $$k; git requires both"; exit 1; }; \
-	done; \
-	echo "check-tagger: ok — tags written only by .github/scripts/tag.sh"
+	echo "check-tagger: ok — no workflow writes a tag directly (lint; behaviour covered by TestTagScript*)"
 .PHONY: check-tagger
