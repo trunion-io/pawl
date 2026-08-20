@@ -84,7 +84,12 @@ jobs:
           TAG: ${{ steps.v.outputs.tag }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          .github/scripts/tag.sh "$TAG" "$SHA" \
+          # --retry-same-commit: this workflow fires once per finishing workflow,
+          # so it can legitimately run twice for one commit. It permits an
+          # existing tag only where it already points at this commit; release.yml
+          # deliberately does not pass it, because AC15 refuses to release over
+          # an existing tag at all.
+          .github/scripts/tag.sh --retry-same-commit "$TAG" "$SHA" \
             "Release candidate $TAG" \
             "Bump: ${{ steps.v.outputs.bump }} from ${{ steps.v.outputs.previous }}, ${{ steps.v.outputs.commits }} commits since the last release"
 
