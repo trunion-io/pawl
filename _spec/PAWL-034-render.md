@@ -42,11 +42,11 @@ markdown as its only output.
 
 **AC2** — The renderer shall not read the working tree, invoke git, open a network
 connection, or call a model.
-`checkable: yes` (once built) — closed by AC3, AC12 and AC13 together: AC3 denies
-the renderer the capability through its own imports, AC12 denies a caller the
-ability to hand it in, and AC13 denies the command path the chance to do it
-before the renderer is reached. Each of the first two was declared sufficient on
-its own during review and neither was.
+`checkable: yes` (once built) — closed by AC3, AC12 and AC13 together, clause by
+clause in the table under AC13. Each of AC3 and AC12 was declared sufficient on
+its own during review and neither was; the table exists so the next reader can
+see which criterion carries which clause rather than taking a claim of
+sufficiency on trust.
 >
 > Rendering successfully outside a repository does not establish this on its own,
 > which an earlier draft claimed it did. `git --version` succeeds anywhere, a
@@ -70,7 +70,8 @@ its own during review and neither was.
 
 **AC3** — The renderer module's import graph shall contain no repository-access
 package, and no package capable of network access or subprocess execution,
-including `net/http`, `net`, `os/exec` and any transitive reacher of them.
+including `net/http`, `net`, `os/exec` and any transitive reacher of them. It
+shall not attempt to exclude file access.
 `checkable: yes` (once built) — over the import graph, which is a different claim
 from AC2 and fails independently.
 
@@ -129,6 +130,24 @@ way through.
 > constrains the path. The byte-identical-outside-a-repository test is the one
 > that checks the property directly rather than a proxy for it.
 >
+> **File access cannot be excluded by import graph at all, and AC3 no longer
+> pretends to.** `fmt` transitively imports `os`, so any renderer that formats
+> anything can reach `os.ReadFile`; a check banning `os` would ban the renderer.
+> AC2's "shall not read the working tree" clause is therefore closed by AC13's
+> byte-identical test and by nothing else — the document is identical inside and
+> outside a repository, so it read nothing. Review found AC3 being credited with
+> a clause it structurally cannot enforce, which is the same mistake as the two
+> before it: a check declared sufficient without asking what it actually covers.
+
+| AC2 clause | Closed by |
+|---|---|
+| open a network connection | AC3 (import graph) |
+| invoke git / any subprocess | AC3 (import graph) |
+| call a model | AC3 (import graph) |
+| read the working tree | **AC13** — import graph cannot reach it |
+| behaviour injected by a caller | AC12 (signature) |
+| enrichment before the renderer | AC13 (command path) |
+>
 > Residual risk after all three: `unsafe` or a linker directive reaching a symbol
 > no check sees, which is not a thing this renderer does and would be visible in
 > review if it started.
@@ -151,6 +170,19 @@ otherwise would be the failure this repository refuses.
 the policy evaluation with each threshold's configured and measured value, and a
 reference to the attestation subject.
 `checkable: yes` (once built) — against a golden file.
+>
+> **This adds a requirement to the verdict record, and DECISION-1 is where it
+> lands.** `policy.Decision` today carries measured values only inside the
+> formatted strings of failing violations, and carries none at all for a
+> changeset that passed — so AC6 as stated cannot be satisfied for the common
+> case without the renderer computing them, which AC5 forbids. Review found the
+> pair.
+>
+> The fix belongs to the record, not to the renderer: the verdict record must
+> carry each threshold's measured value as a number, for passing and failing
+> thresholds alike. That is a change to what `pawl verify` emits, which is
+> already DECISION-1's subject, and it is listed there so the shape is settled
+> before either criterion is built.
 
 **AC7** — Where the record carries contradicted claims, the document shall present
 them under their own heading with their contract references.
@@ -192,15 +224,26 @@ is worse than none, because it looks complete.
 
 ## Open decisions
 
-**DECISION-3 — verdict record persistence.** AC1 and AC2 presume the record is a
-durable artifact with a stable location and format, rather than an in-process
-structure handed to the gate.
+**DECISION-1 — verdict record persistence and content.** AC1 and AC2 presume the
+record is a durable artifact with a stable location and format, rather than an
+in-process structure handed to the gate.
+
+> Numbered 1 because it is the only open decision in this spec. It was
+> `DECISION-3` until review pointed out that this file has no DECISION-1 or
+> DECISION-2, and that PAWL-033 in the same changeset carries a different
+> DECISION-3 — two specs, two decisions, one number.
 
 **It is not durable today.** `pawl verify --json` emits the reading list to
 stdout and `--annotations` writes a check-annotations file; there is no verdict
 record artifact anyone can point at. Making one is a prerequisite for this spec
-and is probably its own unit of work. **Confirm the shape before implementation
-is planned.**
+and is probably its own unit of work.
+
+**AC6 adds a second requirement to that shape:** each threshold's measured value
+as a number, present whether the threshold passed or failed. `policy.Decision`
+has it only inside failing violations' message strings today, and AC5 forbids the
+renderer computing what the verifier did not produce.
+
+**Confirm the shape before implementation is planned.**
 
 ## Out of scope
 

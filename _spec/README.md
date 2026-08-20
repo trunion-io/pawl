@@ -114,7 +114,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-030-review-skill.md` | **built** · `.github/skills/` · extends PAWL-028 |
 | `PAWL-031-automated-contributor-environment.md` | **built** · `copilot-setup-steps.yml` · extends PAWL-030 |
 | `PAWL-033-contradicted-claims.md` | **drafted** · extends PAWL-001 · adds a fifth claim kind |
-| `PAWL-034-render.md` | **drafted** · `pawl render` · **1 open decision: record persistence** |
+| `PAWL-034-render.md` | **drafted** · `pawl render` · **1 open decision: record persistence and content** |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.

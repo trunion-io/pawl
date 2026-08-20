@@ -40,7 +40,9 @@ func readingList() model.ReadingList {
 }
 
 // TestSamplingLeavesTheSampleVerdictUnsetAndTheMechanicalVerdictIntact covers
-// the first half of C-10: sampling must not seed axis 2 from axis 1.
+// the first half of C-10: sampling must not seed the sample verdict from the
+// mechanical one. Field names rather than axis numbers, because internal/calibrate
+// numbers a different pair — there, axis 1 is the human verdict.
 func TestSamplingLeavesTheSampleVerdictUnsetAndTheMechanicalVerdictIntact(t *testing.T) {
 	s := calibrate.FromReadingList(readingList(), "v0", policy.Policy{}, "s1", time.Now())
 
@@ -92,7 +94,8 @@ func TestRecordingAReviewDoesNotOverwriteTheMechanicalVerdict(t *testing.T) {
 		t.Fatal("the two axes collapsed: a cleared span reviewed as a false clear must keep both values")
 	}
 
-	// The untouched span keeps axis 1 and stays unreviewed — recording a verdict
+	// The untouched span keeps its mechanical verdict and stays unreviewed —
+	// recording a verdict
 	// on one span must not propagate.
 	if other := s.Spans[1]; other.Reviewed != calibrate.VerdictPending || other.Verdict != model.VerdictAcknowledged {
 		t.Errorf("second span = (%q, %q), want (%q, unset)",

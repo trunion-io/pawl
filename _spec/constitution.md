@@ -195,9 +195,16 @@ evidence cited over it, and it is decided without a human.
 **Sample verdict** is what a human says about that span during calibration,
 applied after the fact to build an error rate. It is a property of the span's
 relationship to reality, and it is **optional** — a sampled span carries none
-until someone reviews it, and a span never sampled carries none at all. Axis 1
-is always present; axis 2 is not, which is itself a reason neither can be
-derived from the other.
+until someone reviews it, and a span never sampled carries none at all. The
+mechanical verdict is always present; the sample verdict is not, which is itself
+a reason neither can be derived from the other.
+
+> **This rule does not number its axes, deliberately.** `internal/calibrate`
+> already uses "axis 1" and "axis 2" for a different pair — `sample.go` calls the
+> human verdict axis 1 and the attributable cause axis 2 — so numbering this pair
+> the other way round, as an earlier draft did, put two contradictory meanings of
+> "axis 1" in the same codebase, in the one rule whose purpose is to stop these
+> fields being confused. Review caught it. Name the fields.
 
 Every combination that can occur is meaningful. A span may be mechanically
 `clear` and sampled `false_clear` — the machine collapsed it and a human says it

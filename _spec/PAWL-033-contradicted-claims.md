@@ -116,8 +116,10 @@ carry a recorded contradiction through verification unchanged.
 regardless of every other measurement.
 `checkable: yes` (once built)
 
-**AC5** — The gate shall exclude contradicted claims from every threshold in
-`.pawl/policy.toml`, in both numerator and denominator, per the table below.
+**AC5** — The gate shall exclude contradicted claims from the three counted
+thresholds in `.pawl/policy.toml`, in both numerator and denominator, per the
+table below, and shall not require a named check for a contradicted claim on a
+sensitive path.
 `checkable: yes` (once built) — a contradiction is not a quantity of risk. Left
 in a ratio it would dilute the measure it cannot belong to.
 
@@ -144,11 +146,32 @@ in a ratio it would dilute the measure it cannot belong to.
 > claim is contradicted, so these thresholds are not what decides the outcome;
 > the table exists so the *numbers reported alongside* that failure are not
 > nonsense.
+>
+> **`sensitive_paths` is the fourth key and is not a count**, which is why the
+> criterion no longer says "every threshold" — review found the table covered
+> three of the keys `internal/policy`'s `knownKeys` accepts while the criterion
+> claimed all of them. It needs its own clause rather than a table row: the rule
+> is `sensitive_path_needs_named_check`, and a contradicted claim by DECISION-3
+> cites no `VerifiedBy` evidence, so a contradiction on a sensitive path would
+> trip it and report a missing check on top of the contradiction. Two failures
+> for one event, and the second one misleading. `block_on_undetermined` is the
+> fifth key and is untouched: it is about a different kind and AC3 forbids
+> promoting between them.
 
-**AC6** — The system shall reject a policy file carrying any tolerance, threshold
-or waiver for contradicted claims, naming the offending key.
+**AC6** — The system shall reject a policy file carrying any key matching
+`contradicted*` or `*_contradicted`, naming the offending key and saying that
+contradiction is an invariant rather than a threshold.
 `checkable: yes` (once built) — and this is not an exception to C-5, which it
 could not be.
+>
+> Stated as a pattern because the first wording — "any tolerance, threshold or
+> waiver for contradicted claims" — named no key and no rule for recognising one,
+> so no implementation could tell such a key from any other unrecognised one.
+> `unknownKeys` in `internal/policy` warns and continues for anything it does not
+> know, which is the precise behaviour AC6 exists to prevent: a client writes
+> `contradicted_tolerance = 3`, sees a warning scroll past, and believes it took
+> effect. A reserved pattern is what makes the difference between rejecting and
+> shrugging.
 
 > C-5 says the system shall read every gate **threshold** from the policy file and
 > ship no threshold that cannot be overridden there. Contradiction blocking is not
@@ -232,11 +255,19 @@ reader enforces cannot protect anything.
 
 **AC15** — The system shall accept every schema version it previously wrote, and
 shall name the supported set rather than a single value.
-`checkable: yes` (once built) — the whole corpus on disk is `0.1`, including this
-repository's own claim log and every acknowledgement, whose version AC12 does not
-move. An AC14 implementation that recognises only the current version would make
-its first release reject the records pawl itself wrote, turning a compatibility
-guard into a data-loss event. Fail-closed on *unrecognised*, not on *not-latest*.
+`checkable: yes` (once built) — every record on disk today is `0.1`: this
+repository's own claim log, and acknowledgements too, since `claimlog/ack.go`
+stamps them with the same `model.ClaimSchemaVersion` constant AC12 raises. An
+AC14 implementation that recognises only the current version would make its first
+release reject the records pawl itself wrote, turning a compatibility guard into
+a data-loss event. Fail closed on *unrecognised*, not on *not-latest*.
+>
+> An earlier version of this note said acknowledgements were a separate case
+> "whose version AC12 does not move". That is false — one constant covers both
+> record types — and review caught it. The correction does not change what AC15
+> requires, but it does change the reason: acknowledgements are not an exception
+> needing special handling, they are the same case, and an implementation written
+> from the wrong premise might have treated them as one.
 
 **AC16** — The system shall refuse to write `schema_version` `0.2` unless the
 previous released tag already contains the AC14 reader, and shall say which
@@ -257,7 +288,11 @@ The spec simultaneously required and forbade the first `0.2` write.
 | Release | Contains | Writes |
 |---|---|---|
 | **1 — reader** | AC10, AC14, AC15, AC16 | still `0.1` |
-| **2 — writer** | AC1–AC9, AC11, AC12, AC13 | `0.2` |
+| **2 — writer** | AC1, AC2, **AC2a**, AC3–AC9, AC11, AC12, AC13 | `0.2` |
+
+AC2a is named explicitly because "AC1–AC9" does not obviously contain it, and a
+release shipping AC2 without its reverse-direction check accepts `contradicts` on
+kinds where DECISION-3 says it is invalid.
 
 Release 1 teaches every consumer to refuse what it cannot read, and refuses to
 emit the new version itself. Release 2 may write `0.2` because release 1 is by
