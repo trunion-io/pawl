@@ -136,7 +136,8 @@ The system shall represent the mechanical resolution of a claimed span and the
 calibration sample verdict of that span as two separate fields, and shall derive
 neither from the other.
 
-**checkable:** yes — `trunion.io/pawl/internal/e2e.TestSampleVerdictAndMechanicalVerdictAreSeparateFields`
+**checkable:** yes — `trunion.io/pawl/internal/e2e.TestSamplingLeavesTheSampleVerdictUnsetAndTheMechanicalVerdictIntact`
+and `trunion.io/pawl/internal/e2e.TestRecordingAReviewDoesNotOverwriteTheMechanicalVerdict`
 
 > An earlier draft said "the lifecycle state of a claim", made the rule
 > `checkable: yes` with no test named, and then `partially` with no check at all.
@@ -147,21 +148,35 @@ neither from the other.
 >
 > Restated over what is already there: `SampledSpan.Verdict` carries the
 > mechanical resolution and `SampledSpan.Reviewed` the sample verdict. The rule is
-> that those must not collapse, and the named test holds it — a cleared span
+> that those must not collapse, and the named tests hold it — a cleared span
 > reviewed as a false clear must keep both values, which is the disagreement the
 > false-clear rate is built from and which a single field could not express.
+>
+> The tests drive `calibrate.FromReadingList` and `Sample.RecordVerdict`, which
+> are the two production paths that write these fields and therefore the two
+> places a collapse would appear. A first version asserted over a `SampledSpan`
+> literal instead; it passed whatever those functions did, including deriving one
+> field from the other, and was replaced after review caught it. Both mutations
+> were run against the replacement and both fail it.
 >
 > Marking it `partially — enforced by review` was the second error. The property
 > is mechanically testable against fields that already exist, so assigning it to
 > review indefinitely would have made it permanent attention debt for want of
 > fifteen lines.
 
-**Lifecycle state** is what the tool knows about a claim within one changeset:
-emitted at edit time or resolved mechanically at verification time. It is a
-property of the claim's relationship to its own verification.
+**Mechanical span verdict** is what the tool resolved about a changed span
+within one changeset — `model.SpanVerdict`, one of `clear`, `acknowledged`,
+`unclaimed` or `unverified`. It is a property of the span's relationship to the
+evidence cited over it, and it is decided without a human.
 
-**Sample verdict** is what a human says about a claim during calibration,
-applied after the fact to build an error rate. It is a property of the claim's
+> Not "lifecycle state of a claim", which is what an earlier draft called this
+> axis and which the note above rejects. Restating it here would have
+> reintroduced the term the rule exists to avoid: a `SpanVerdict` is over a span,
+> is decided per changeset, and belongs to no claim in particular — a span can be
+> `unclaimed` and have no claim at all.
+
+**Sample verdict** is what a human says about that span during calibration,
+applied after the fact to build an error rate. It is a property of the span's
 relationship to reality.
 
 Every combination that can occur is meaningful. A span may be mechanically
@@ -188,7 +203,14 @@ retrofitted onto data already collected, so it binds from before the first
 sample is taken.
 
 > PAWL-007 already splits its sampling into two axes — a binary verdict and an
-> attributable cause. This rule is about a different pair and the two compose:
-> PAWL-007's axes both live inside sample verdict, which is one half of this
-> one. Whether that layering holds under real sampling is untested, because no
-> samples exist.
+> attributable cause. This rule is about a different pair, and all three are
+> represented independently rather than nested: `SampledSpan.Verdict` is the
+> mechanical verdict this rule protects, `SampledSpan.Reviewed` is PAWL-007's
+> binary verdict, and `SampledSpan.Causes` is PAWL-007's attributable cause, a
+> sibling field rather than something held inside `Reviewed`.
+>
+> An earlier draft said PAWL-007's two axes "both live inside sample verdict".
+> That reads as a layering the code does not have, and review caught it: `Causes`
+> is its own field, written by `RecordCause` after `Reviewed` is set. This rule
+> binds only the first pair. Whether three independent axes carry their weight
+> under real sampling is untested, because no samples exist.

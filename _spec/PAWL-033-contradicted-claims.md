@@ -180,6 +180,29 @@ smaller thing than a rename.
 > `0.1` in `internal/model` and the claim log is where a `contradicted` kind is
 > written; leaving it there while AC10 hard-fails on an unrecognised kind would
 > give an older binary a record it must reject and no version to reject it *by*.
+>
+> **Raising the version does not by itself protect an older binary, and an
+> earlier draft implied it did.** Nothing reads `schema_version` today:
+> `claimlog.Load` unmarshals JSON and validates neither the version nor the kind
+> (`internal/claimlog/claimlog.go`, `internal/claimlog/store.go`), so a release
+> already in the field will parse a `0.2` record, see a `contradicted` kind it
+> has no case for, and carry on. The bump is only a label until AC14 gives it
+> teeth, which is why AC14 is in this spec rather than a later one — a fail-open
+> reader is the C-3 antipattern with a version number written on it.
+
+**AC14** — Where a record carries a `schema_version` the system does not
+recognise, the system shall fail rather than parse it, and shall say which
+version it found and which it supports.
+`checkable: yes` (once built) — the criterion AC12 depends on. A version field no
+reader enforces cannot protect anything, and the protection has to ship *before*
+records carrying the new version are written, not alongside them.
+>
+> Ordering matters and is not free. Every binary in the field predates AC14, so
+> those readers are fail-open whatever this spec says — the guarantee starts at
+> the first release carrying AC14 and covers only readers from that release
+> onward. Deployments must take that release before any producer writes `0.2`.
+> Stating this is the honest version; claiming the bump protects existing
+> installations would not be true.
 
 ## Non-functional
 
@@ -231,9 +254,24 @@ under AC1 — a fifth, not a fourth: `assumption`, `rejected_alternative`,
 lifecycle state is not, and `undetermined` being an unknown while `contradicted`
 is a known makes the latter the higher-order signal rather than a nested one.
 
-The consequence is that this spec is much smaller than drafted. It adds an enum
-value rather than a field, so the claim schema keeps its shape and the amendment
-question the hand-off raised mostly evaporates.
+The consequence is that this spec is much smaller than drafted, though not as
+small as an earlier version of this paragraph claimed. It said the spec "adds an
+enum value rather than a field, so the claim schema keeps its shape" — which
+AC2, AC8 and AC9 contradict, because all three require a reference to the
+contradicted contract to be validated, displayed and carried into the
+attestation, and `Claim` has no field that can hold one.
+
+**DECISION-3 — resolved: a dedicated field.** `Claim` gains
+`contradicts string \`json:"contradicts,omitempty"\``, required when and only
+when `Kind` is `contradicted`. The alternatives were both worse. `Ticket` is a
+tracker reference and means something else, so overloading it would make the two
+indistinguishable to any consumer. `VerifiedBy` holds `EvidenceRef` values,
+which are *checks asserted to verify the claim* — putting the thing a claim
+contradicts into the list of things that confirm it inverts the field's meaning
+in the one record type where being precise matters most.
+
+So the schema does change shape, by one optional field, and that is a further
+reason the `schema_version` bump in AC12 is right rather than ceremonial.
 
 ## Out of scope
 
@@ -243,4 +281,8 @@ question the hand-off raised mostly evaporates.
 - **Waivers.** A waiver against a threshold and a waiver against a contradiction
   are different objects with different approvers, and only one should be
   grantable by the client. That depends on this state existing.
-- **The sampler's treatment of contradicted claims.** PAWL-007.
+- **How the sampler treats contradicted claims that reach it by another route,
+  and what the corpus taxonomy should call them.** Not whether they are sampled:
+  AC13 settles that and makes it checkable. An earlier draft put the whole
+  subject out of scope while AC13 specified it, which left the spec with two
+  scope boundaries that disagreed. PAWL-007.

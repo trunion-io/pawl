@@ -68,8 +68,21 @@ connection, or call a model.
 package, and no package capable of network access or subprocess execution,
 including `net/http`, `net`, `os/exec` and any transitive reacher of them.
 `checkable: yes` (once built) — over the import graph, which is a different claim
-from AC2 and fails independently. It catches a direct dependency; a call reached
-indirectly at runtime is AC2's to catch, which is why both exist.
+from AC2 and fails independently.
+
+> An earlier draft ended this with "it catches a direct dependency; a call
+> reached indirectly at runtime is AC2's to catch", which contradicted AC2's own
+> line above saying AC3 decides it — and specified no check for the runtime half
+> it invented. Review caught the pair.
+>
+> The transitive formulation is what resolves it. A runtime call still needs the
+> package in the binary, and a package not in the transitive import graph is not
+> in the binary; there is no indirect route to a capability that was never
+> linked. So closing the graph over `net/http`, `net`, `os/exec` and everything
+> reaching them closes AC2 completely rather than partially, and no separate
+> runtime check is owed. The residual risk is `unsafe` or a linker directive
+> reaching a symbol the graph does not show, which is not a thing this renderer
+> does and would be visible in review if it started.
 
 **AC4** — The renderer shall produce byte-identical output for repeated
 invocations on one record.
