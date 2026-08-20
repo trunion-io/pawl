@@ -132,12 +132,14 @@ and our model of it. A mock would have hidden all three.
 
 ## C-10 — Mechanical resolution and sample verdict are distinct axes
 
-The system shall represent the mechanical resolution of a claimed span and the
-calibration sample verdict of that span as two separate fields, and shall derive
-neither from the other.
+The system shall represent the mechanical resolution of a changed span and the
+calibration sample verdict of that span as two separate fields, neither derived
+from the other, and shall carry both through persistence. The sample verdict is
+optional: a span not yet reviewed has none.
 
-**checkable:** yes — `trunion.io/pawl/internal/e2e.TestSamplingLeavesTheSampleVerdictUnsetAndTheMechanicalVerdictIntact`
-and `trunion.io/pawl/internal/e2e.TestRecordingAReviewDoesNotOverwriteTheMechanicalVerdict`
+**checkable:** yes — `trunion.io/pawl/internal/e2e.TestSamplingLeavesTheSampleVerdictUnsetAndTheMechanicalVerdictIntact`,
+`trunion.io/pawl/internal/e2e.TestRecordingAReviewDoesNotOverwriteTheMechanicalVerdict`
+and `trunion.io/pawl/internal/e2e.TestBothAxesSurviveTheRoundTripThroughDisk`
 
 > An earlier draft said "the lifecycle state of a claim", made the rule
 > `checkable: yes` with no test named, and then `partially` with no check at all.
@@ -159,6 +161,21 @@ and `trunion.io/pawl/internal/e2e.TestRecordingAReviewDoesNotOverwriteTheMechani
 > field from the other, and was replaced after review caught it. Both mutations
 > were run against the replacement and both fail it.
 >
+> A third test covers persistence, which the other two cannot see. `calibrate.Save`
+> and `LoadAll` are how the corpus survives an engagement, and the pre-existing
+> round-trip test asserts the id, tool version and policy snapshot without ever
+> asserting a verdict — so `json:"-"` on `SampledSpan.Reviewed` would drop every
+> human verdict ever recorded while passing both in-memory tests *and* that one.
+> Review named the mutation; it was run, it passes all three older tests, and only
+> the round-trip test catches it. A corpus is what is on disk.
+>
+> **"Changed span", not "claimed span".** An earlier wording bound the rule to
+> claimed spans while the axis it names is `model.SpanVerdict`, which is defined
+> over any changed span and can be `acknowledged` or `unclaimed` — and an
+> acknowledgement is deliberately not a claim. The rule would have excluded two of
+> the four states it exists to keep distinct, including the acknowledged span the
+> tests use. Review caught it.
+>
 > Marking it `partially — enforced by review` was the second error. The property
 > is mechanically testable against fields that already exist, so assigning it to
 > review indefinitely would have made it permanent attention debt for want of
@@ -177,7 +194,10 @@ evidence cited over it, and it is decided without a human.
 
 **Sample verdict** is what a human says about that span during calibration,
 applied after the fact to build an error rate. It is a property of the span's
-relationship to reality.
+relationship to reality, and it is **optional** — a sampled span carries none
+until someone reviews it, and a span never sampled carries none at all. Axis 1
+is always present; axis 2 is not, which is itself a reason neither can be
+derived from the other.
 
 Every combination that can occur is meaningful. A span may be mechanically
 `clear` and sampled `false_clear` — the machine collapsed it and a human says it

@@ -42,9 +42,11 @@ markdown as its only output.
 
 **AC2** — The renderer shall not read the working tree, invoke git, open a network
 connection, or call a model.
-`checkable: yes` (once built) — closed by AC3 and AC12 together: AC3 denies the
-renderer the capability through its own imports, AC12 denies a caller the ability
-to hand it in.
+`checkable: yes` (once built) — closed by AC3, AC12 and AC13 together: AC3 denies
+the renderer the capability through its own imports, AC12 denies a caller the
+ability to hand it in, and AC13 denies the command path the chance to do it
+before the renderer is reached. Each of the first two was declared sufficient on
+its own during review and neither was.
 >
 > Rendering successfully outside a repository does not establish this on its own,
 > which an earlier draft claimed it did. `git --version` succeeds anywhere, a
@@ -99,12 +101,37 @@ interface, function or channel parameter through which a caller could supply
 behaviour.
 `checkable: yes` (once built) — over the exported signature, which is where the
 injected-behaviour route is opened or closed. AC3 constrains what the renderer
-can reach on its own; this constrains what a caller can hand it. Without both,
-the trust inversion AC2 exists to protect survives a clean import graph.
+can reach on its own; this constrains what a caller can hand it.
+
+**AC13** — The `pawl render` command path shall read the record, call the
+renderer and write the result, and shall do nothing else: it shall not invoke
+git, read the working tree, open a network connection, call a model, or alter
+the record between reading it and passing it on.
+`checkable: yes` (once built) — over the command function's own call graph rather
+than the whole of `internal/cli`, which legitimately reaches git for every other
+command. A test asserts the rendered output is byte-identical to rendering the
+same record outside a repository, which fails if the command enriched it on the
+way through.
 >
-> The residual risk after both is `unsafe` or a linker directive reaching a
-> symbol neither check sees, which is not a thing this renderer does and would be
-> visible in review if it started.
+> This is the third correction to the same criterion, and the pattern is worth
+> stating because two structural checks in a row were each declared sufficient
+> and were not. AC3 closes what the renderer imports. AC12 closes what a caller
+> can hand it. **Neither reaches `cmdRender` itself** — `internal/cli` already
+> imports `gitutil` and `harness`, so the command could invoke git and enrich a
+> perfectly concrete record before calling a perfectly pure renderer, and both
+> earlier checks would pass while AC2 was violated in the one code path AC2 is
+> about.
+>
+> The lesson is not that another check was needed. It is that "the renderer
+> cannot reach the repository" was never the requirement — **the rendered
+> document must be a function of the record alone** is, and that is a property of
+> the whole path from record to output. AC3 and AC12 constrain the module; AC13
+> constrains the path. The byte-identical-outside-a-repository test is the one
+> that checks the property directly rather than a proxy for it.
+>
+> Residual risk after all three: `unsafe` or a linker directive reaching a symbol
+> no check sees, which is not a thing this renderer does and would be visible in
+> review if it started.
 
 **AC4** — The renderer shall produce byte-identical output for repeated
 invocations on one record.

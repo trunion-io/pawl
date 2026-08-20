@@ -99,3 +99,60 @@ func TestRecordingAReviewDoesNotOverwriteTheMechanicalVerdict(t *testing.T) {
 			other.Verdict, other.Reviewed, model.VerdictAcknowledged)
 	}
 }
+
+// TestBothAxesSurviveTheRoundTripThroughDisk covers the third way the axes can
+// collapse, which the two tests above cannot see: they hold only in memory.
+//
+// The corpus is persisted by calibrate.Save and read back by LoadAll, and
+// TestSamplesRoundTripThroughDisk asserts the id, tool version and policy
+// snapshot without ever asserting a verdict. So a struct tag alone —
+// `json:"-"` on SampledSpan.Reviewed — silently drops every human verdict ever
+// recorded while both in-memory tests still pass. Review found this; the
+// mutation is real and was run.
+//
+// C-10 is about what the corpus can express, and a corpus is what is on disk.
+func TestBothAxesSurviveTheRoundTripThroughDisk(t *testing.T) {
+	repo := newRepo(t)
+
+	s := calibrate.FromReadingList(readingList(), "0.1.0", policy.Defaults(), "s-roundtrip", time.Now())
+	if err := s.RecordVerdict("internal/x.go", 1, 4, calibrate.VerdictFalseClear, "r", time.Now()); err != nil {
+		t.Fatalf("RecordVerdict: %v", err)
+	}
+	if err := s.RecordVerdict("internal/y.go", 7, 9, calibrate.VerdictCorrect, "r", time.Now()); err != nil {
+		t.Fatalf("RecordVerdict: %v", err)
+	}
+	if err := calibrate.Save(repo, s); err != nil {
+		t.Fatal(err)
+	}
+
+	all, err := calibrate.LoadAll(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("loaded %d samples, want 1", len(all))
+	}
+	got := map[string]calibrate.SampledSpan{}
+	for _, sp := range all[0].Spans {
+		got[sp.Path] = sp
+	}
+
+	// The disagreeing pair: mechanically clear, reviewed as a false clear. This
+	// is the record the false-clear rate is computed from, so losing either half
+	// on disk loses the measurement.
+	x := got["internal/x.go"]
+	if x.Verdict != model.VerdictClear {
+		t.Errorf("mechanical verdict did not survive the round trip: %q", x.Verdict)
+	}
+	if x.Reviewed != calibrate.VerdictFalseClear {
+		t.Errorf("sample verdict did not survive the round trip: %q — the human verdict is the corpus", x.Reviewed)
+	}
+
+	// The agreeing pair must survive too, so a reader cannot recover one field
+	// by assuming the other.
+	y := got["internal/y.go"]
+	if y.Verdict != model.VerdictAcknowledged || y.Reviewed != calibrate.VerdictCorrect {
+		t.Errorf("second span round-tripped as (%q, %q), want (%q, %q)",
+			y.Verdict, y.Reviewed, model.VerdictAcknowledged, calibrate.VerdictCorrect)
+	}
+}

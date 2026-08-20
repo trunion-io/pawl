@@ -82,6 +82,16 @@ as malformed without both.
 `checkable: yes` (once built) — a contradiction naming nothing is an assertion
 that something is wrong somewhere, which is the shape C-1 refuses.
 
+**AC2a** — Where a claim of any other kind carries a contract reference, the
+system shall reject the record as malformed, naming the field and the kind.
+`checkable: yes` (once built) — the reverse direction, which AC2 does not cover.
+DECISION-3 says the field is valid "when and only when" the kind is
+`contradicted`; without this an implementation that accepts `contradicts` on an
+`assumption` satisfies every criterion while contradicting the decision that
+introduced the field. Review found the gap. A field whose meaning depends on
+another field's value has to be checked from both ends or it is not constrained
+at all.
+
 **AC3** — The system shall not derive, infer or promote `contradicted`, and shall
 carry a recorded contradiction through verification unchanged.
 >
@@ -107,9 +117,33 @@ regardless of every other measurement.
 `checkable: yes` (once built)
 
 **AC5** — The gate shall exclude contradicted claims from every threshold in
-`.pawl/policy.toml`, in both numerator and denominator.
+`.pawl/policy.toml`, in both numerator and denominator, per the table below.
 `checkable: yes` (once built) — a contradiction is not a quantity of risk. Left
 in a ratio it would dilute the measure it cannot belong to.
+
+| Threshold | Lines covered *only* by contradicted claims | Lines also covered by an ordinary claim |
+|---|---|---|
+| `max_changed_lines` | excluded from the count | counted once, as now |
+| `max_must_read_ratio` | excluded from numerator **and** denominator | counted, resolved by the ordinary claim as now |
+| `max_unclaimed_lines` | **not** counted as unclaimed | counted, resolved as now |
+
+> Review found the criterion was not implementable as first written: two of the
+> three thresholds are counts with no numerator or denominator to speak of, and a
+> span may be covered by a contradicted claim *and* an ordinary one at the same
+> time — so "exclude contradicted claims" left three incompatible implementations
+> all able to claim compliance.
+>
+> The rule the table encodes: **a contradicted claim removes its lines from the
+> arithmetic, and never adds them anywhere.** The `max_unclaimed_lines` row is the
+> one that is easy to get backwards. A contradicted line is not unclaimed — an
+> agent recorded something about it, and the most important thing it could
+> record — so counting it as unclaimed would fail the changeset twice for one
+> event and make the unclaimed count mean two different things.
+>
+> None of this softens the gate. AC4 fails the changeset outright whenever any
+> claim is contradicted, so these thresholds are not what decides the outcome;
+> the table exists so the *numbers reported alongside* that failure are not
+> nonsense.
 
 **AC6** — The system shall reject a policy file carrying any tolerance, threshold
 or waiver for contradicted claims, naming the offending key.
@@ -213,6 +247,23 @@ a test builds a real repository with a previous tag lacking the reader and
 asserts the write is refused, in the shape `internal/e2e/tagscript_test.go`
 already uses. [`PAWL-013`](./PAWL-013-versioning-and-release.md) owns the release
 pipeline this runs inside; it does not own this criterion.
+
+**This spec ships in two releases, and AC12 belongs to the second.** Review found
+that AC12 and AC16 as first written could not both be satisfied: AC12 mandates
+writing `0.2`, AC16 refuses that write unless the *previous* tag carries the
+reader, and a single release containing both is its own previous-tag-less case.
+The spec simultaneously required and forbade the first `0.2` write.
+
+| Release | Contains | Writes |
+|---|---|---|
+| **1 — reader** | AC10, AC14, AC15, AC16 | still `0.1` |
+| **2 — writer** | AC1–AC9, AC11, AC12, AC13 | `0.2` |
+
+Release 1 teaches every consumer to refuse what it cannot read, and refuses to
+emit the new version itself. Release 2 may write `0.2` because release 1 is by
+then the previous tag. Nothing in release 1 is useful on its own, which is the
+cost of the ordering and is smaller than the alternative: a fail-open reader
+meeting a record it silently mishandles.
 >
 > A first draft of this criterion was written `checkable: partially` on the
 > grounds that release ordering is not a property of one checkout, and declared
