@@ -113,6 +113,7 @@ the tracker issue it came from. The parts that matter:
 | `PAWL-028-agent-skills.md` | **built** · `skills/` · extends PAWL-019 |
 | `PAWL-030-review-skill.md` | **built** · `.github/skills/` · extends PAWL-028 |
 | `PAWL-031-automated-contributor-environment.md` | **built** · `copilot-setup-steps.yml` · extends PAWL-030 |
+| `PAWL-035-telemetry.md` | **drafted** · OTLP emitter, default-on · **1 open decision** |
 
 Signatures are absent throughout: PAWL-001 to PAWL-006 were written after the
 code, which is the wrong order and is itself the argument for the spec tool.
