@@ -369,3 +369,79 @@ func TestTagScriptRemovesTheLocalTagWhenThePushIsRejected(t *testing.T) {
 		t.Error("the local tag survived a rejected push; a retry would fetch, fail, and never reallocate")
 	}
 }
+
+// Two correct checks that deadlocked when composed.
+//
+// tag.sh refuses a lightweight tag as a completed candidate. existingCandidateAt
+// reused any ref peeling to HEAD, lightweight included — so allocation returned
+// the same name every attempt, tag.sh refused it every attempt, and the workflow
+// exhausted its retries without ever advancing. Each half was right on its own.
+func TestRCAdvancesPastALightweightCandidate(t *testing.T) {
+	dir, _, _ := tagRepo(t)
+
+	nv := filepath.Join(t.TempDir(), "nextversion")
+	build := exec.Command("go", "build", "-o", nv, "./internal/release/nextversion")
+	build.Dir = "../.."
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("building nextversion: %v\n%s", err, out)
+	}
+
+	for _, args := range [][]string{
+		{"-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "--allow-empty", "-m", "feat: something"},
+		{"tag", "v0.0.1-rc.1"}, // lightweight, at HEAD
+	} {
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	cmd := exec.Command(nv, "--rc")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("nextversion --rc: %v", err)
+	}
+	kv := map[string]string{}
+	for _, line := range strings.Split(string(out), "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
+			kv[k] = v
+		}
+	}
+
+	if kv["reused"] == "true" {
+		t.Error("a lightweight tag was reused as a published candidate; tag.sh would refuse it on every attempt")
+	}
+	if kv["tag"] == "v0.0.1-rc.1" {
+		t.Errorf("allocation did not advance past the lightweight tag, got %s", kv["tag"])
+	}
+	if kv["tag"] != "v0.0.1-rc.2" {
+		t.Errorf("tag = %s, want v0.0.1-rc.2", kv["tag"])
+	}
+}
+
+// A lost race must be distinguishable from any other failure, so a caller can
+// retry contention generously and a broken push only a few times.
+func TestTagScriptSignalsALostRaceDistinctly(t *testing.T) {
+	dir, first, _ := tagRepo(t)
+
+	push := exec.Command("git", "push", "origin", first+":refs/tags/v0.1.0-rc.1")
+	push.Dir = dir
+	if out, err := push.CombinedOutput(); err != nil {
+		t.Fatalf("seeding the remote tag: %v\n%s", err, out)
+	}
+
+	cmd := exec.Command(tagScript(t), "v0.1.0-rc.1", "HEAD", "candidate")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+	err := cmd.Run()
+
+	var code int
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	}
+	if code != 3 {
+		t.Errorf("a lost race must exit 3 so it can be told from a transient failure, got %d", code)
+	}
+}

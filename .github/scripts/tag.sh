@@ -59,7 +59,14 @@ if git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
     # remote succeeds, a missing tag is published, and a remote tag on another
     # commit fails, which is correct.
     echo "tag.sh: $tag already points at $(git rev-parse --short "$wanted"); ensuring origin has it"
-    git push origin "$tag"
+    if ! git push origin "$tag"; then
+      # Same reasoning as the create path below: another commit published this
+      # name while we held it only locally. Leaving it behind makes the caller's
+      # next `git fetch --tags` fail instead of fetching the winner.
+      git tag -d "$tag" >/dev/null
+      echo "tag.sh: push of $tag was rejected; removed the local tag" >&2
+      exit 3
+    fi
     exit 0
   fi
 
@@ -101,6 +108,10 @@ git tag -a "$tag" "$target" "$@"
 if ! git push origin "$tag"; then
   git tag -d "$tag" >/dev/null
   echo "tag.sh: push of $tag was rejected; removed the local tag" >&2
-  exit 1
+  # Exit 3 means specifically "this name was taken". A caller allocating
+  # candidate numbers must be able to tell that from a transient failure: losing
+  # a race should be retried until it wins, while a broken push should not be
+  # retried forever.
+  exit 3
 fi
 echo "tag.sh: tagged $tag at $(git rev-parse --short "$target")"

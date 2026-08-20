@@ -181,7 +181,20 @@ func existingCandidateAt(version, ref string) (string, int) {
 		if err != nil {
 			fail(fmt.Errorf("cannot resolve %s: %w", tag, err))
 		}
-		if strings.TrimSpace(at) == want {
+		if strings.TrimSpace(at) != want {
+			continue
+		}
+
+		// Only an annotated tag counts as a candidate already published.
+		// tag.sh refuses a lightweight one, so reusing it here would hand back
+		// the same name on every attempt and the workflow would exhaust its
+		// retries without advancing — two correct checks that deadlock when
+		// composed. Leaving it unclaimed lets nextRCNumber step past it.
+		kind, err := git("cat-file", "-t", "refs/tags/"+tag)
+		if err != nil {
+			fail(fmt.Errorf("cannot determine the type of %s: %w", tag, err))
+		}
+		if strings.TrimSpace(kind) == "tag" {
 			return tag, n
 		}
 	}

@@ -95,8 +95,16 @@ jobs:
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -eu
-          attempt=1
-          while [ "$attempt" -le 5 ]; do
+          # Two budgets, because losing a race and failing to push are different
+          # things. A fixed ceiling for both does not establish AC8: with six
+          # commits allocating in lockstep the last loses rc.1 through rc.5 and
+          # exits with no candidate at all. Contention is retried generously,
+          # since every loss means some other commit definitely won a number and
+          # the space is advancing; a genuine failure is retried three times and
+          # then reported.
+          contention=0
+          transient=0
+          while [ "$contention" -lt 50 ] && [ "$transient" -lt 3 ]; do
             # Fatal, not tolerated. Allocation reads the tags it can see, so
             # a failed fetch means allocating against a stale view and minting a
             # number another run already published. C-3: a step that could not
@@ -117,16 +125,24 @@ jobs:
             prev=$(printf '%s\n' "$out" | sed -n 's/^previous=//p')
             n=$(printf '%s\n' "$out" | sed -n 's/^commits=//p')
 
-            if .github/scripts/tag.sh --retry-same-commit "$tag" "$SHA" \
-                 "Release candidate $tag" \
-                 "Bump: $bump from $prev, $n commits since the last release"; then
-              exit 0
-            fi
+            status=0
+            .github/scripts/tag.sh --retry-same-commit "$tag" "$SHA" \
+              "Release candidate $tag" \
+              "Bump: $bump from $prev, $n commits since the last release" || status=$?
 
-            echo "attempt $attempt: $tag was taken; reallocating"
-            attempt=$((attempt + 1))
+            case "$status" in
+              0) exit 0 ;;
+              3) contention=$((contention + 1))
+                 echo "$tag was taken by another commit; reallocating (contention $contention)" ;;
+              *) transient=$((transient + 1))
+                 echo "tag.sh failed with status $status (attempt $transient of 3)" ;;
+            esac
           done
-          echo "could not allocate a candidate in 5 attempts"
+          if [ "$transient" -ge 3 ]; then
+            echo "giving up: tag.sh kept failing for reasons other than a lost race"
+          else
+            echo "giving up: lost 50 consecutive races, which is not contention but a loop"
+          fi
           exit 1
 
       - name: Report
