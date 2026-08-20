@@ -57,6 +57,16 @@ fi
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-git tag -a "$tag" "$target" -m "$*"
+# One -m per argument: git renders each as its own paragraph, which is what both
+# workflows had before this script existed. "$*" joined the subject and every
+# body line into a single line.
+n=$#
+i=0
+while [ "$i" -lt "$n" ]; do
+  m=$1; shift
+  set -- "$@" -m "$m"
+  i=$((i + 1))
+done
+git tag -a "$tag" "$target" "$@"
 git push origin "$tag"
 echo "tag.sh: tagged $tag at $(git rev-parse --short "$target")"

@@ -161,3 +161,97 @@ func TestTagScriptRefusesRetryOnADifferentCommit(t *testing.T) {
 		t.Errorf("the existing tag was moved to %s; it must be left alone", got)
 	}
 }
+
+// Both workflows passed a subject and body paragraphs before tag.sh existed.
+// Joining them with "$*" would have collapsed the annotation to one line.
+func TestTagScriptPreservesMessageParagraphs(t *testing.T) {
+	dir, _, _ := tagRepo(t)
+
+	if out, err := runTag(t, dir, "v0.1.0", "HEAD",
+		"Release v0.1.0", "Bump: minor from 0.0.1", "Third paragraph"); err != nil {
+		t.Fatalf("tag failed: %v\n%s", err, out)
+	}
+
+	cmd := exec.Command("git", "tag", "-l", "--format=%(contents)", "v0.1.0")
+	cmd.Dir = dir
+	b, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.TrimRight(string(b), "\n")
+
+	want := "Release v0.1.0\n\nBump: minor from 0.0.1\n\nThird paragraph"
+	if got != want {
+		t.Errorf("annotation lost its paragraphs:\n got: %q\nwant: %q", got, want)
+	}
+}
+
+// nextversion --rc must reuse a candidate that already points at this commit.
+//
+// It fires once per finishing workflow, so it can legitimately run twice for one
+// commit. Returning max+1 unconditionally meant the second run computed rc.2 and
+// tagged the same commit again — and tag.sh's --retry-same-commit could never
+// fire, because it was never handed a tag that already existed.
+func TestRCReusesTheCandidateForTheSameCommit(t *testing.T) {
+	dir, _, _ := tagRepo(t)
+
+	nv := filepath.Join(t.TempDir(), "nextversion")
+	build := exec.Command("go", "build", "-o", nv, "./internal/release/nextversion")
+	build.Dir = "../.."
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("building nextversion: %v\n%s", err, out)
+	}
+
+	run := func() map[string]string {
+		t.Helper()
+		cmd := exec.Command(nv, "--rc")
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("nextversion --rc: %v", err)
+		}
+		kv := map[string]string{}
+		for _, line := range strings.Split(string(out), "\n") {
+			if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
+				kv[k] = v
+			}
+		}
+		return kv
+	}
+
+	// The seed commits are not conventional, so give it something to bump on.
+	c := exec.Command("git", "-c", "user.name=t", "-c", "user.email=t@e",
+		"commit", "-q", "--allow-empty", "-m", "feat: something")
+	c.Dir = dir
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, out)
+	}
+
+	first := run()
+	if first["reused"] != "false" {
+		t.Fatalf("first run should mint a candidate, got %+v", first)
+	}
+	if out, err := runTag(t, dir, "--retry-same-commit", first["tag"], "HEAD", "candidate"); err != nil {
+		t.Fatalf("tagging the candidate failed: %v\n%s", err, out)
+	}
+
+	second := run()
+	if second["reused"] != "true" {
+		t.Errorf("a second run for the same commit must reuse, got %+v", second)
+	}
+	if second["tag"] != first["tag"] {
+		t.Errorf("second run computed %s, want %s", second["tag"], first["tag"])
+	}
+
+	// A new commit still advances.
+	c = exec.Command("git", "-c", "user.name=t", "-c", "user.email=t@e",
+		"commit", "-q", "--allow-empty", "-m", "feat: another")
+	c.Dir = dir
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, out)
+	}
+	third := run()
+	if third["reused"] != "false" || third["tag"] == first["tag"] {
+		t.Errorf("a new commit must get a new candidate, got %+v", third)
+	}
+}
