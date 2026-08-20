@@ -101,13 +101,32 @@ than per repository, so it is not repeated for every checkout. If the state
 cannot be written the notice prints, since a notice too often is a smaller
 failure than one never seen.
 
-**AC18** — The system shall spend no more than two seconds in total on emission,
+**AC18** — The system shall spend no more than 100ms in total on emission,
 measured across name resolution, connection, write and read.
-`checkable: yes` (once built) — a number, because "bounded" is satisfied by
-thirty seconds and thirty seconds on a developer's critical path is a broken
-tool. Two seconds is a guess at the right order of magnitude and is stated so it
-can be argued with; a blackholed collector costs that once per invocation and
-nothing else.
+`checkable: yes` (once built) — derived from measurement rather than chosen.
+Invocations on this repository take 37ms for `pending` and 251ms for `verify` and
+`gate`, stable to within 5ms over repeated runs. A budget of 100ms is under half
+a typical `verify`, so a blackholed collector slows it noticeably and cannot
+dominate it.
+>
+> An earlier draft said two seconds and admitted in the same sentence that it was
+> a guess. Two seconds is eight times a whole `verify` and fifty-four times a
+> `pending`: a number that would have made the tool feel broken, written into a
+> criterion, in a repository whose subject is asserting things without evidence.
+> The measurement took one command.
+
+**AC19** — The system shall emit nothing from the harness hook path.
+`checkable: yes` (once built) — the hook runs on every edit and completes in 5ms,
+measured over repeated runs. The AC18 budget is twenty times that, so telemetry
+here would let a slow collector make an edit-time hook the slowest thing in the
+loop, to learn nothing `verify` does not already report. PAWL-016 drove this
+path's token cost from 159 to 73 for the same reason; adding a network call now
+would undo that argument in a different currency.
+>
+> The first draft of this criterion used 37ms, which is `pawl pending` — a
+> different command from `pawl hook claude-code`. The real figure makes the case
+> twenty times stronger and I reached for the nearest number rather than the
+> right one, twice in the same criterion.
 
 **AC4** — The system shall provide configuration that disables telemetry
 entirely, and shall then collect and emit nothing.
