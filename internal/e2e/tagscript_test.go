@@ -445,3 +445,41 @@ func TestTagScriptSignalsALostRaceDistinctly(t *testing.T) {
 		t.Errorf("a lost race must exit 3 so it can be told from a transient failure, got %d", code)
 	}
 }
+
+// A push that fails with no conflicting tag on origin is transient, not a lost
+// race. Returning the race status for every failure made the caller's two
+// budgets meaningless: a broken push was retried under the contention budget,
+// which exists precisely because contention is known to be making progress.
+func TestTagScriptDistinguishesTransientFromLostRace(t *testing.T) {
+	dir, _, _ := tagRepo(t)
+
+	// Point origin at nothing: the push fails, and no tag is contested.
+	rm := exec.Command("git", "remote", "set-url", "origin", filepath.Join(t.TempDir(), "gone.git"))
+	rm.Dir = dir
+	if out, err := rm.CombinedOutput(); err != nil {
+		t.Fatalf("set-url: %v\n%s", err, out)
+	}
+
+	cmd := exec.Command(tagScript(t), "v0.1.0-rc.1", "HEAD", "candidate")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+	err := cmd.Run()
+
+	var code int
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	}
+	if code == 3 {
+		t.Error("an unreachable origin reported a lost race; the caller would retry it 50 times under the contention budget")
+	}
+	if code != 1 {
+		t.Errorf("expected a transient failure (1), got %d", code)
+	}
+
+	local := exec.Command("git", "tag", "-l", "v0.1.0-rc.1")
+	local.Dir = dir
+	b, _ := local.Output()
+	if strings.TrimSpace(string(b)) != "" {
+		t.Error("the local tag survived a failed push")
+	}
+}

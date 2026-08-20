@@ -185,7 +185,10 @@ func existingCandidateAt(version, ref string) (string, int) {
 			continue
 		}
 
-		// Only an annotated tag counts as a candidate already published.
+		// Only an annotated tag is eligible for reuse. "Published" would
+		// overstate it: this reads local refs, and an annotated tag left by an
+		// interrupted run may never have reached origin — which the retry path
+		// handles by pushing it.
 		// tag.sh refuses a lightweight one, so reusing it here would hand back
 		// the same name on every attempt and the workflow would exhaust its
 		// retries without advancing — two correct checks that deadlock when

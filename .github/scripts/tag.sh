@@ -24,6 +24,39 @@ if [ "${1:-}" = "--retry-same-commit" ]; then
   shift
 fi
 
+# after_failed_push decides what a rejected push actually means.
+#
+# Returning 3 for every failure made the caller's two budgets meaningless: an
+# unreachable origin or a credential problem looked exactly like a lost race, so
+# a broken push was retried fifty times under the contention budget it was never
+# meant to use. The name being taken is a claim about the remote, so it is
+# checked against the remote.
+#
+#   0  origin already has this exact object — nothing left to do
+#   3  origin has a different object under this name — the race was lost
+#   1  anything else, including origin being unreadable — transient
+after_failed_push() {
+  _tag=$1
+  _ours=$(git rev-parse "refs/tags/$_tag")
+  _theirs=$(git ls-remote --tags origin "refs/tags/$_tag" 2>/dev/null \
+    | awk -v r="refs/tags/$_tag" '$2 == r { print $1 }')
+
+  if [ -z "$_theirs" ]; then
+    git tag -d "$_tag" >/dev/null
+    echo "tag.sh: push of $_tag failed and origin does not hold that name; treating as transient" >&2
+    return 1
+  fi
+
+  if [ "$_theirs" = "$_ours" ]; then
+    echo "tag.sh: origin already has $_tag as this exact object"
+    return 0
+  fi
+
+  git tag -d "$_tag" >/dev/null
+  echo "tag.sh: $_tag was taken by another commit; removed the local tag" >&2
+  return 3
+}
+
 [ "$#" -ge 3 ] || { echo "usage: tag.sh [--retry-same-commit] <tag> <commit-ish> <message...>" >&2; exit 2; }
 tag=$1; target=$2; shift 2
 
@@ -60,12 +93,7 @@ if git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
     # commit fails, which is correct.
     echo "tag.sh: $tag already points at $(git rev-parse --short "$wanted"); ensuring origin has it"
     if ! git push origin "$tag"; then
-      # Same reasoning as the create path below: another commit published this
-      # name while we held it only locally. Leaving it behind makes the caller's
-      # next `git fetch --tags` fail instead of fetching the winner.
-      git tag -d "$tag" >/dev/null
-      echo "tag.sh: push of $tag was rejected; removed the local tag" >&2
-      exit 3
+      after_failed_push "$tag" || exit $?
     fi
     exit 0
   fi
@@ -106,12 +134,6 @@ git tag -a "$tag" "$target" "$@"
 # allocation would fetch, fail, and never reallocate. Remove what we created
 # before reporting the failure, leaving the checkout as we found it.
 if ! git push origin "$tag"; then
-  git tag -d "$tag" >/dev/null
-  echo "tag.sh: push of $tag was rejected; removed the local tag" >&2
-  # Exit 3 means specifically "this name was taken". A caller allocating
-  # candidate numbers must be able to tell that from a transient failure: losing
-  # a race should be retried until it wins, while a broken push should not be
-  # retried forever.
-  exit 3
+  after_failed_push "$tag" || exit $?
 fi
 echo "tag.sh: tagged $tag at $(git rev-parse --short "$target")"
