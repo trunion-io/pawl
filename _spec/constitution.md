@@ -146,9 +146,15 @@ property of the claim's relationship to its own verification.
 applied after the fact to build an error rate. It is a property of the claim's
 relationship to reality.
 
-Every combination is meaningful. A claim may be mechanically `contradicted` and
-sampled `immaterial`; it may be mechanically verified and sampled `wrong`. The
+Every combination is meaningful. A claim may be mechanically `unverified` and
+sampled `immaterial` — nothing exercised it and it did not matter; it may be
+mechanically covered and sampled `wrong` — a passing test over a false claim. The
 calibration dataset is only useful because it can express all of them.
+
+Neither axis is the claim's *kind*, which is a third thing: what the agent
+established at edit time, fixed when the record is written and never revised.
+`contradicted` is a kind for that reason (PAWL-033), and a contradicted claim is
+still sampled like any other.
 
 Collapsing the axes produces a dataset that cannot answer the question
 calibration exists to answer: a binary pass or fail cannot distinguish a claim

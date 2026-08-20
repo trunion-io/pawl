@@ -44,9 +44,28 @@ and closes on its own.
 
 ## Where the value goes
 
-**AC1** — The claim record shall carry a lifecycle state distinct from its kind,
-with the values `verified`, `unverified` and `contradicted`.
+**AC1** — The claim record shall accept `contradicted` as a claim kind, alongside
+`assumption`, `rejected_alternative`, `undetermined` and `constraint`.
 `checkable: yes` (once built)
+>
+> A kind rather than a new lifecycle field, decided against an earlier draft that
+> proposed the field. Three arguments, and the second is the one that settles it.
+>
+> `Kind` is already the axis for what the agent established at edit time — took
+> for granted, considered and rejected, could not establish, believes the code
+> must satisfy. "Established that the contract cannot be satisfied" is the same
+> shape of thing.
+>
+> **A kind never changes and a lifecycle state does.** `Claim.Kind` is never
+> assigned outside construction anywhere in `internal/`; verification wraps a
+> claim in a `ResolvedClaim` and adds anchor and coverage without touching what it
+> wraps. AC3 below requires `contradicted` to be immutable after recording, so a
+> value that never changes was being proposed as a lifecycle field — the wrong
+> axis on its own terms.
+>
+> And the distinction is epistemic, not procedural: `undetermined` is an unknown,
+> `contradicted` is a known. Nesting a known state under a secondary property
+> puts the higher-order signal in the lower-order place.
 
 **AC2** — Where a claim is recorded as `contradicted`, the system shall require a
 reference to the contract contradicted and a reason, and shall reject the record
@@ -56,6 +75,9 @@ that something is wrong somewhere, which is the shape C-1 refuses.
 
 **AC3** — The system shall not derive, infer or promote `contradicted`, and shall
 carry a recorded contradiction through verification unchanged.
+>
+> This is already how every kind behaves, so the criterion states a property
+> rather than adding a mechanism — which is part of why a kind is the right axis.
 `checkable: yes` (once built)
 
 > **Why an agent-asserted state is acceptable here, when it is not elsewhere.**
@@ -105,8 +127,8 @@ each.
 contract reference and reason intact.
 `checkable: yes` (once built)
 
-**AC10** — Where a claim carries a lifecycle state the system does not recognise,
-the system shall fail rather than treat the claim as absent or unverified.
+**AC10** — Where a claim carries a kind the system does not recognise, the system
+shall fail rather than treat the claim as absent or unverified.
 `checkable: yes` (once built) — C-3. An unreadable record is not an empty one.
 
 **AC11** — The verifier shall leave a recorded `contradicted` state unchanged for
@@ -136,19 +158,15 @@ consumer cannot interpret is not cosmetic. Either the URL bumps to `v0.2`, or
 `v0.1` is documented as requiring consumers to ignore unrecognised state values.
 **Rich decides. No code past this point.**
 
-**DECISION-2 — a state, or a fourth kind.** This spec adds a lifecycle state
-because that is what the hand-off proposed, and the tree does not obviously agree.
-`Claim.Kind` already holds `assumption`, `rejected_alternative` and
-`undetermined`, and `undetermined` already means the agent could not establish
-something and proceeded. `SpanVerdict` separately holds `unclaimed`,
-`unverified`, `clear` and `acknowledged`; there is no lifecycle-state field to
-extend.
+**DECISION-2 — resolved: a fourth kind.** An earlier draft proposed a lifecycle
+state and recorded this as open. Settled in favour of a kind, for the reasons
+under AC1: `Kind` is already the edit-time axis, a kind is immutable where a
+lifecycle state is not, and `undetermined` being an unknown while `contradicted`
+is a known makes the latter the higher-order signal rather than a nested one.
 
-So `contradicted` is either a new field on the claim, as written, or a fourth
-`Kind` beside `undetermined`. The second is a much smaller change and would not
-touch the shape of PAWL-001 at all. The first keeps kind and state orthogonal,
-which C-10 argues for on the calibration axes and which may or may not be the
-same argument here. **Rich decides, and it changes AC1.**
+The consequence is that this spec is much smaller than drafted. It adds an enum
+value rather than a field, so the claim schema keeps its shape and the amendment
+question the hand-off raised mostly evaporates.
 
 ## Out of scope
 
