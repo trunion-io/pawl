@@ -1,8 +1,19 @@
 # PAWL-029 — Versioning model
 
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/release`, `.github/workflows/`
-**Extends:** [PAWL-013](./PAWL-013-versioning-and-release.md) (delivered,
-immutable) and [PAWL-027](./PAWL-027-contribution-and-release-flow.md).
+**Extends:** [PAWL-013](./PAWL-013-versioning-and-release.md) (drafted, not
+built) and [PAWL-027](./PAWL-027-contribution-and-release-flow.md) (built).
+
+> PAWL-013's status line says `DRAFTED, NOT BUILT` and the index agrees, so the
+> "delivered, immutable" qualifier this spec carried was asserting a status the
+> repository does not record. PAWL-024 and PAWL-027 assert the same thing about
+> PAWL-013 and are equally wrong; correcting those is not this spec's to do.
+>
+> The distinction matters. Immutability binds *delivered* specs, so PAWL-013
+> could have been amended in place. Superseding by reference is still the better
+> record — it keeps what was believed and why it changed — but it is a choice
+> here rather than an obligation, and describing a choice as a rule is the kind
+> of claim this repository exists to refuse.
 
 **Supersedes by reference:**
 
@@ -13,9 +24,9 @@ immutable) and [PAWL-027](./PAWL-027-contribution-and-release-flow.md).
 | PAWL-013 **AC13** | no release branches; every release cut from `main` | AC7 |
 | PAWL-013 **AC1** | tagged `vMAJOR.MINOR.PATCH` on a commit reachable from `main` | AC9 — unchanged for ordinary releases, narrowed for a maintenance release |
 | PAWL-013 **AC7** | a tag not reachable from `main` fails the release | AC9 |
-| PAWL-027 **AC3** | `Verdict-Affecting: yes` forces MAJOR whatever the type | AC3, AC5 — it stops being a version input |
+| PAWL-027 **AC3** | `Verdict-Affecting: yes` forces MAJOR whatever the type | AC3, AC5 — it stops being a version input; its semantic obligation survives as AC13 |
 | PAWL-027 **AC4** | the trailer is stated as `yes` or `no` | AC5 — the same trigger, a three-way answer |
-| PAWL-027 **AC12** | version computed from *the* previous release tag | AC11 — the newest release tag reachable from the commit being released |
+| PAWL-027 **AC12** | version computed from *the* previous release tag | AC11 — the highest SemVer release tag reachable from the release commit |
 | PAWL-027 **AC13** | bump table with `Verdict-Affecting: yes` → MAJOR | AC3 |
 | PAWL-027 **AC14** | pre-1.0 shifts every bump down one position | AC4 |
 
@@ -102,7 +113,7 @@ its already-published meaning as PATCH.
 | `!` or `BREAKING CHANGE` | MAJOR |
 | any `feat` | MINOR |
 | any `fix`, `perf` | PATCH |
-| any `revert` with a `Reverts:` trailer naming a resolvable commit | the bump that commit implies |
+| any `revert` whose `Reverts:` trailer resolves to a commit this table can classify | the bump that commit implies |
 | any other `revert` | PATCH |
 | only `docs`, `test`, `ci`, `build`, `chore`, `refactor`, `style` | none |
 
@@ -118,8 +129,14 @@ to be a version input and becomes a disclosure input (AC5).
 > Conventional Commits nor the parser has such a field, so two implementations
 > could read the same history and publish different versions. The mechanism is
 > named now: a `Reverts:` trailer holding a commit this repository can resolve,
-> whose own message is parsed for the bump. Unresolvable or absent is PATCH,
-> which is the floor rather than a guess.
+> whose own message is parsed for the bump.
+>
+> The first row requires that commit to be classifiable by this table, not merely
+> resolvable. History before PAWL-027 is not Conventional Commits — thirty-eight
+> commits on `main` were rewritten into it and everything earlier was not — so a
+> `Reverts:` pointing at one of those resolves fine and implies no bump, which
+> would have fallen through both rows. Absent, unresolvable and unclassifiable
+> all take the PATCH floor.
 
 **AC4** — The system shall apply the same bump below 1.0 as above it.
 `checkable: yes` (once built) — supersedes PAWL-013 AC5 and PAWL-027 AC14, which
@@ -170,6 +187,15 @@ mechanically detectable: `internal/policy`, `internal/resolve`,
 `internal/accounting`, `internal/evidence`. This criterion is about presence and
 form only.
 
+**AC13** — A change that alters which changesets pass shall declare its direction
+whether or not it touches a module listed in AC5.
+`checkable: no` — this is what PAWL-027 AC3 required, and it is kept rather than
+replaced. AC5's path list is AC4's *proxy* for that obligation, not the
+obligation itself: `internal/cli/cli.go` turns `decision.Allowed` into the gate's
+process result and can change which changesets pass without touching any listed
+module. Superseding AC3 and keeping only the proxy would have let exactly those
+paths bypass disclosure while the spec read as though nothing had been lost.
+
 **AC12** — The declared direction shall describe the change's actual effect on
 which changesets pass.
 `checkable: no` — and separated from AC5 deliberately. Bundled, the pair claimed
@@ -178,6 +204,14 @@ allowed values are mechanical, and whether the value is *correct* is the thing
 this spec twice says cannot be checked. Splitting them makes the criterion that
 is enforced and the criterion that is trusted two different criteria.
 
+> `mixed` exists because three values could not describe a real change. One
+> correction in the resolver or in accounting can make some changesets newly pass
+> and others newly fail — it is not strictly stricter, not strictly more
+> permissive, and plainly not `no`. Without a fourth value AC5 would have rejected
+> every truthful declaration for that change and accepted only a false one, which
+> is a rule that manufactures the thing it exists to prevent. `mixed` carries the
+> same disclosure as `more-permissive` under AC6, because it contains one.
+>
 > The trigger deliberately is not "where a change alters which changesets pass".
 > That phrasing makes `no` unanswerable — a change that alters them cannot
 > truthfully declare `no` — and makes enforcement depend on detecting the very
@@ -185,9 +219,9 @@ is enforced and the criterion that is trusted two different criteria.
 > module is a fact about the diff. Whether it moved verdicts, and in which
 > direction, is the author's claim about that fact.
 
-**AC6** — The system shall name changes declared `more-permissive` first and
-separately in the release notes, and shall state that they may allow changesets
-to merge that previously escalated.
+**AC6** — The system shall name changes declared `more-permissive` or `mixed`
+first and separately in the release notes, and shall state that they may allow
+changesets to merge that previously escalated.
 `checkable: yes` (once built) — a client deciding whether to take an upgrade has
 one question ahead of every other, and it is not "did the API change".
 
