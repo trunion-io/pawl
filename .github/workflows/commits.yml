@@ -1,0 +1,186 @@
+# PAWL-027 AC1–AC4 — the commit history has to be machine-readable, because the
+# version is derived from it.
+name: commits
+
+on:
+  pull_request:
+  # merge_group: the queue builds its own ref and waits for the required checks
+  # to report on it. Without this trigger the entry sits until
+  # check_response_timeout_minutes expires and then fails, every time.
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  # The branch is squash-merged, so the pull request title becomes the only
+  # commit message that reaches main — and therefore the only one `nextversion`
+  # will ever read. Linting the branch commits without linting the title checks
+  # the text that gets discarded and ignores the text that survives.
+  #
+  # No job-level `if`: a skipped job never reports its context, and a required
+  # context that never reports stalls the merge queue exactly as a missing
+  # trigger would. The guard is on the steps instead.
+  title:
+    name: pull request title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Nothing to check on a merge group
+        if: github.event_name == 'merge_group'
+        run: echo "the title was checked on the pull request; reporting so the queue is not left waiting"
+
+      - name: Lint the title as a commit subject
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$TITLE" > /tmp/title.txt
+          go run ./internal/release/lintcommit /tmp/title.txt
+
+      # AC4 at the title, for the same reason: a Verdict-Affecting trailer on a
+      # branch commit does not survive a squash. If any commit touches a deciding
+      # module, the pull request body must carry the declaration too.
+      - name: Require the declaration in the body where it is needed
+        if: github.event_name == 'pull_request'
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          deciding='^internal/(policy|resolve|accounting|evidence)/'
+          if ! git diff --name-only "$BASE".."$HEAD" | grep -Eq "$deciding"; then
+            echo "no deciding module touched; no declaration needed"
+            exit 0
+          fi
+          if printf '%s\n' "$BODY" | grep -Eiq '^Verdict-Affecting:[[:space:]]*(yes|no)[[:space:]]*$'; then
+            echo "declaration present in the pull request body"
+            exit 0
+          fi
+          echo "::error::this pull request touches a module that decides verdicts; its body must declare Verdict-Affecting"
+          cat <<'MSG'
+
+          Squash merge discards the individual commit messages, so a
+          Verdict-Affecting trailer on a branch commit never reaches main. Put
+          one on its own line in the pull request body:
+
+            Verdict-Affecting: yes
+            Verdict-Affecting: no
+
+          "yes" forces a MAJOR bump (PAWL-013 AC2) whatever the type, because a
+          client's contract with pawl is which changesets pass. Answering "no" is
+          expected; what is refused is silence.
+          MSG
+          exit 1
+
+  conventional:
+    name: conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      # Direct dependencies are pinned; their transitive graph is not, because
+      # there is no lockfile. Calling that "pinned exactly" would assert a
+      # property this does not deliver — the failure the whole repository exists
+      # to refuse — so it says what is true instead.
+      #
+      # Closing the gap means committing package.json and package-lock.json and
+      # using `npm ci`, which puts a Node lockfile in a repository whose go.mod
+      # has an empty require block. PAWL-027 already names the alternative:
+      # internal/release/lintcommit checks the same rule in Go with no toolchain
+      # at all, and is the obvious replacement if this surface becomes a cost.
+      - name: Install commitlint
+        run: npm install --no-save --no-audit --no-fund
+          @commitlint/cli@21.2.2 @commitlint/config-conventional@21.2.2
+
+      # The range differs by event: a pull request has base/head, a merge group
+      # has its own. Resolving it here keeps one job serving both rather than
+      # skipping in the queue, where a skipped required check is indistinguishable
+      # from one that was never wired up.
+      - name: Resolve the commit range
+        id: range
+        run: |
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            echo "from=${{ github.event.merge_group.base_sha }}" >> "$GITHUB_OUTPUT"
+            echo "to=${{ github.event.merge_group.head_sha }}"   >> "$GITHUB_OUTPUT"
+          else
+            echo "from=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "to=${{ github.event.pull_request.head.sha }}"   >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Lint the commits in range
+        run: npx commitlint
+          --from "${{ steps.range.outputs.from }}"
+          --to "${{ steps.range.outputs.to }}"
+          --verbose
+
+  # AC4 on the branch commits. Kept alongside the title check rather than
+  # replaced by it: the trailer is what an author writes while the assumption is
+  # live (C-2), and the body is what reaches main.
+  verdict-declaration:
+    name: verdict declaration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Nothing to check on a merge group
+        if: github.event_name == 'merge_group'
+        run: echo "declarations were checked on the pull request; reporting so the queue is not left waiting"
+
+      - name: Require a Verdict-Affecting declaration
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          deciding='^internal/(policy|resolve|accounting|evidence)/'
+          missing=0
+
+          for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            if ! git show --name-only --format= "$sha" | grep -Eq "$deciding"; then
+              continue
+            fi
+            if git log -1 --format=%B "$sha" | grep -Eiq '^Verdict-Affecting:[[:space:]]*(yes|no)[[:space:]]*$'; then
+              continue
+            fi
+            echo "::error::$sha touches a module that decides verdicts but does not declare Verdict-Affecting"
+            git log -1 --format='  %h %s' "$sha"
+            missing=1
+          done
+
+          if [ "$missing" = 1 ]; then
+            cat <<'MSG'
+
+          A commit touching internal/policy, internal/resolve, internal/accounting
+          or internal/evidence must end with one of:
+
+            Verdict-Affecting: yes
+            Verdict-Affecting: no
+
+          "yes" forces a MAJOR bump (PAWL-013 AC2) regardless of the commit type,
+          because a client's contract with pawl is which changesets pass — a moved
+          threshold does not break their pipeline, it silently changes what merges.
+
+          Answering "no" is expected and normal. What is refused is silence: it is
+          not evidence that a change does not move verdicts (C-3).
+          MSG
+            exit 1
+          fi
+          echo "every commit touching a deciding module declares its effect"
