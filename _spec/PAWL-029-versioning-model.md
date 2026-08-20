@@ -15,6 +15,7 @@ immutable) and [PAWL-027](./PAWL-027-contribution-and-release-flow.md).
 | PAWL-013 **AC7** | a tag not reachable from `main` fails the release | AC9 |
 | PAWL-027 **AC3** | `Verdict-Affecting: yes` forces MAJOR whatever the type | AC3, AC5 — it stops being a version input |
 | PAWL-027 **AC4** | the trailer is stated as `yes` or `no` | AC5 — the same trigger, a three-way answer |
+| PAWL-027 **AC12** | version computed from *the* previous release tag | AC11 — the newest release tag reachable from the commit being released |
 | PAWL-027 **AC13** | bump table with `Verdict-Affecting: yes` → MAJOR | AC3 |
 | PAWL-027 **AC14** | pre-1.0 shifts every bump down one position | AC4 |
 
@@ -101,7 +102,8 @@ its already-published meaning as PATCH.
 | `!` or `BREAKING CHANGE` | MAJOR |
 | any `feat` | MINOR |
 | any `fix`, `perf` | PATCH |
-| any `revert` | the bump of the change it reverts, or PATCH if that is not stated |
+| any `revert` with a `Reverts:` trailer naming a resolvable commit | the bump that commit implies |
+| any other `revert` | PATCH |
 | only `docs`, `test`, `ci`, `build`, `chore`, `refactor`, `style` | none |
 
 `checkable: yes` (once built) — `Verdict-Affecting` no longer appears. It ceases
@@ -109,9 +111,15 @@ to be a version input and becomes a disclosure input (AC5).
 >
 > `revert` was accepted by commitlint and by `KnownType` and had no row here, so
 > the implementation maps it to no bump — a revert of a breaking change currently
-> produces nothing to release. It cannot be derived mechanically, because the
-> bump depends on what was reverted; the commit states it, and PATCH is the
-> floor when it does not.
+> produces nothing to release.
+>
+> An earlier draft said the bump was "the bump of the change it reverts, or PATCH
+> if that is not stated" and never said how a commit states it. Neither
+> Conventional Commits nor the parser has such a field, so two implementations
+> could read the same history and publish different versions. The mechanism is
+> named now: a `Reverts:` trailer holding a commit this repository can resolve,
+> whose own message is parsed for the bump. Unresolvable or absent is PATCH,
+> which is the floor rather than a guess.
 
 **AC4** — The system shall apply the same bump below 1.0 as above it.
 `checkable: yes` (once built) — supersedes PAWL-013 AC5 and PAWL-027 AC14, which
@@ -130,14 +138,36 @@ that a commit declared `more-permissive`.
 > that cannot fail is the thing this repository exists to refuse, and it took a
 > review to notice I had written one.
 
+**AC11** — The system shall compute a release from the newest release tag
+reachable from the commit being released, and from the commits since it.
+`checkable: yes` (once built) — supersedes PAWL-027 AC12, which said "the
+previous release tag" and left which one unspecified.
+>
+> Without this, AC7 and AC9 permit a maintenance branch that cannot produce a
+> correct version. The delivered implementation lists tags with
+> `--sort=-v:refname` and takes the newest globally, ignoring reachability — so a
+> branch from `v1.0.0` with `v2.0.0` on `main` computes against `v2.0.0` and
+> cannot produce `v1.0.1`. Permitting the branch while leaving the version
+> computation unable to serve it would have been a backport path in name only.
+
 ## Verdict direction
 
 **AC5** — Where a change touches a module that participates in deciding a
-verdict, the system shall require the commit to declare `Verdict-Affecting` as
-`stricter`, `more-permissive` or `no`, and shall reject a commit that omits it.
+verdict, the system shall require the commit to carry a `Verdict-Affecting`
+trailer whose value is `stricter`, `more-permissive` or `no`, and shall reject a
+commit that omits it or uses another value.
 `checkable: yes` (once built) — the trigger is PAWL-027 AC4's, unchanged and
 mechanically detectable: `internal/policy`, `internal/resolve`,
-`internal/accounting`, `internal/evidence`.
+`internal/accounting`, `internal/evidence`. This criterion is about presence and
+form only.
+
+**AC12** — The declared direction shall describe the change's actual effect on
+which changesets pass.
+`checkable: no` — and separated from AC5 deliberately. Bundled, the pair claimed
+verified disclosure while accepting an untruthful `no`: the trigger and the
+allowed values are mechanical, and whether the value is *correct* is the thing
+this spec twice says cannot be checked. Splitting them makes the criterion that
+is enforced and the criterion that is trusted two different criteria.
 
 > The trigger deliberately is not "where a change alters which changesets pass".
 > That phrasing makes `no` unanswerable — a change that alters them cannot
