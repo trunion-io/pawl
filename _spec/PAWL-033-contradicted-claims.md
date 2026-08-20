@@ -18,16 +18,17 @@ here altered four of its six criteria, which review caught.
 | PAWL-006 | Effect |
 |---|---|
 | AC1 — read thresholds from `.pawl/policy.toml` | **holds**, plus AC6 here reserves a key pattern the file may not carry |
-| AC2 — fail above the line budget | **holds**, over a count AC5 here narrows |
-| AC3 — fail above the must-read ratio | **holds**, over a numerator and denominator AC5 here narrows |
+| AC2 — fail above the line budget | **holds, unchanged** — contradicted lines are counted like any other |
+| AC3 — fail above the must-read ratio | **holds, unchanged** — contradicted lines are counted like any other |
 | AC4 — fail on unclaimed changed lines | **holds**, and AC5 here settles that a contradicted line is not unclaimed |
 | AC5 — sensitive paths need a named check | **holds except** for contradicted claims, which cite no evidence by DECISION-3 and are exempted here |
 | AC6 — exit non-zero and emit the decision | **holds**, unchanged |
 
-Nothing above is superseded. Every PAWL-006 criterion still decides what it
-decided; AC5 here changes only which lines reach the arithmetic, which is why the
-gate stays strictly stricter — AC4 above fails the changeset outright whenever a
-contradiction is present.
+Nothing above is superseded, and the gate only ever gets stricter. Two of
+PAWL-006's criteria are untouched; AC4 gains a clarification that keeps a
+contradicted line out of the *unclaimed* count without removing it from anything
+else, and AC5 gains a narrow exemption that prevents a second, misleading failure
+for one event. AC4 in this spec fails the changeset outright regardless.
 
 ## Stakeholders
 
@@ -138,47 +139,47 @@ carry a recorded contradiction through verification unchanged.
 regardless of every other measurement.
 `checkable: yes` (once built)
 
-**AC5** — The gate shall exclude contradicted claims from the three counted
-thresholds in `.pawl/policy.toml`, in both numerator and denominator, per the
-table below, and shall not require a named check for a contradicted claim on a
+**AC5** — A contradicted claim shall not reduce any gate measurement. The lines
+it covers shall be counted as changed and as requiring a human read, shall not be
+counted as unclaimed, and shall not require a named check where they fall on a
 sensitive path.
-`checkable: yes` (once built) — a contradiction is not a quantity of risk. Left
-in a ratio it would dilute the measure it cannot belong to.
+`checkable: yes` (once built) — four assertions over one changeset carrying one
+contradicted claim.
 
-| Threshold | Lines covered *only* by contradicted claims | Lines also covered by an ordinary claim |
-|---|---|---|
-| `max_changed_lines` | excluded from the count | counted once, as now |
-| `max_must_read_ratio` | excluded from numerator **and** denominator | counted, resolved by the ordinary claim as now |
-| `max_unclaimed_lines` | **not** counted as unclaimed | counted, resolved as now |
+| Threshold | Lines covered by a contradicted claim |
+|---|---|
+| `max_changed_lines` | **counted**, like any other changed line |
+| `max_must_read_ratio` | **counted in the numerator and the denominator** |
+| `max_unclaimed_lines` | **not** counted as unclaimed |
+| `sensitive_paths` | exempt from `sensitive_path_needs_named_check` |
+| `block_on_undetermined` | untouched — a different kind, and AC3 forbids promoting between them |
 
-> Review found the criterion was not implementable as first written: two of the
-> three thresholds are counts with no numerator or denominator to speak of, and a
-> span may be covered by a contradicted claim *and* an ordinary one at the same
-> time — so "exclude contradicted claims" left three incompatible implementations
-> all able to claim compliance.
+> **This criterion previously said the opposite**, and review was right to refuse
+> it. It excluded contradicted lines from the counted thresholds "in both
+> numerator and denominator", reasoning that a contradiction is not a quantity of
+> risk. That reasoning does not survive PAWL-006's own non-functional note:
+> *comprehension has a hard ceiling regardless of trail quality*. A contradicted
+> line is still a line a human must read and understand. Whether the trail over it
+> is good, bad or self-refuting changes what the reviewer concludes, not how much
+> there is to read — so excluding it made the reported changeset size false, and
+> made the gate **looser** in exactly the case that should worry a reader most.
 >
-> The rule the table encodes: **a contradicted claim removes its lines from the
-> arithmetic, and never adds them anywhere.** The `max_unclaimed_lines` row is the
-> one that is easy to get backwards. A contradicted line is not unclaimed — an
-> agent recorded something about it, and the most important thing it could
-> record — so counting it as unclaimed would fail the changeset twice for one
-> event and make the unclaimed count mean two different things.
+> The rule is now one sentence: **a contradiction never makes a number smaller.**
+> Both exceptions go the other way and neither is a relaxation:
 >
-> None of this softens the gate. AC4 fails the changeset outright whenever any
-> claim is contradicted, so these thresholds are not what decides the outcome;
-> the table exists so the *numbers reported alongside* that failure are not
-> nonsense.
+> `max_unclaimed_lines` — a contradicted line is not unclaimed. An agent recorded
+> something about it, and the most important thing it could record. Counting it as
+> unclaimed would fail the changeset twice for one event and make the unclaimed
+> count mean two different things.
 >
-> **`sensitive_paths` is the fourth key and is not a count**, which is why the
-> criterion no longer says "every threshold" — review found the table covered
-> three of the keys `internal/policy`'s `knownKeys` accepts while the criterion
-> claimed all of them. It needs its own clause rather than a table row: the rule
-> is `sensitive_path_needs_named_check`, and a contradicted claim by DECISION-3
-> cites no `VerifiedBy` evidence, so a contradiction on a sensitive path would
-> trip it and report a missing check on top of the contradiction. Two failures
-> for one event, and the second one misleading. `block_on_undetermined` is the
-> fifth key and is untouched: it is about a different kind and AC3 forbids
-> promoting between them.
+> `sensitive_paths` — a contradicted claim cites no `VerifiedBy` evidence by
+> DECISION-3, so the named-check rule would fire and report a *missing check* on
+> top of the contradiction. Two failures for one event, and the second one
+> misleading about which problem to fix.
+>
+> None of this decides the outcome: AC4 fails the changeset outright whenever any
+> claim is contradicted. AC5 exists so the numbers reported alongside that failure
+> are true.
 
 **AC6** — The system shall reject a policy file carrying any key matching
 `contradicted*` or `*_contradicted`, naming the offending key and saying that
