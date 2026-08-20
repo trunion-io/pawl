@@ -1,0 +1,18 @@
+{
+  "_comment": "Two endpoints, applied separately. See README.md \u2014 this file is a record, not a single PATCH body.",
+  "permissions": {
+    "enabled": true,
+    "allowed_actions": "all",
+    "sha_pinning_required": false
+  },
+  "permissions/workflow": {
+    "default_workflow_permissions": "read",
+    "can_approve_pull_request_reviews": false
+  },
+  "permissions/fork-pr-contributor-approval": {
+    "approval_policy": "all_external_contributors"
+  },
+  "permissions/artifact-and-log-retention": {
+    "days": 90
+  }
+}

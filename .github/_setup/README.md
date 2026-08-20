@@ -40,6 +40,42 @@ gh api -X POST repos/trunion-io/pawl/rulesets \
   --input .github/_setup/ruleset-main.json
 ```
 
+Actions settings live on their own endpoints and are recorded in
+`actions.json`, which is a record rather than a single request body:
+
+```bash
+gh api -X PUT repos/trunion-io/pawl/actions/permissions \
+  -F enabled=true -f allowed_actions=all
+gh api -X PUT repos/trunion-io/pawl/actions/permissions/workflow \
+  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false
+```
+
+`default_workflow_permissions: read` is load-bearing: PAWL-025 AC3 requires each
+job to hold the minimum token it needs, and a read-only default is what makes the
+`permissions:` block in each workflow an increase from a safe floor rather than a
+decrease from a permissive one.
+
+`can_approve_pull_request_reviews: false` keeps `GITHUB_TOKEN` from approving
+pull requests. Nothing here should be able to satisfy a review requirement by
+running.
+
+`fork-pr-contributor-approval` is set to `all_external_contributors`, the
+strictest of the three policies: a workflow proposed from a fork runs only after
+a maintainer approves it, every time, not just on a contributor's first pull
+request.
+
+This matters more here than the setting's name suggests. PAWL-025 AC4 refuses any
+trigger that hands a fork's code access to repository secrets, and this is the
+other half of that argument — AC4 governs what the workflows declare, and this
+governs whether an unreviewed fork gets to run them at all. The release job holds
+`id-token: write` and can sign artifacts as pawl, so "runs automatically on a
+proposal from a stranger" is not a posture this repository can hold.
+
+```bash
+gh api -X PUT repos/trunion-io/pawl/actions/permissions/fork-pr-contributor-approval \
+  -f approval_policy=all_external_contributors
+```
+
 Two settings have no representation in `repo.json` because they are separate
 endpoints:
 
