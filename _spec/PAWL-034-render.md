@@ -108,11 +108,25 @@ can reach on its own; this constrains what a caller can hand it.
 renderer and write the result, and shall do nothing else: it shall not invoke
 git, read the working tree, open a network connection, call a model, or alter
 the record between reading it and passing it on.
-`checkable: yes` (once built) — over the command function's own call graph rather
-than the whole of `internal/cli`, which legitimately reaches git for every other
-command. A test asserts the rendered output is byte-identical to rendering the
-same record outside a repository, which fails if the command enriched it on the
-way through.
+`checkable: yes` (once built) — by two checks that establish different halves,
+because neither is sufficient alone:
+>
+> **(a) The output is a function of the record.** Rendering one record inside and
+> outside a repository produces byte-identical output. This fails if the command
+> enriched the record on the way through.
+>
+> **(b) `cmdRender` reaches nothing it should not.** A static check over that
+> function's own call graph — not the whole of `internal/cli`, which legitimately
+> reaches git for every other command — finds no call into `gitutil`, `harness`,
+> `os` file access, or any subprocess.
+>
+> Check (a) alone does not establish the no-read clause, which an earlier draft
+> claimed it did and review corrected. A command can read repository data and
+> discard it, or read values that happen to match what the record already
+> carries, and still emit identical bytes. Byte-identity proves the output does
+> not *depend* on the repository — the same gap PAWL-034 already recorded against
+> the original AC2 scenario, reappearing one level up. Only (b) observes whether
+> the read happened.
 >
 > This is the third correction to the same criterion, and the pattern is worth
 > stating because two structural checks in a row were each declared sufficient
@@ -144,9 +158,9 @@ way through.
 | open a network connection | AC3 (import graph) |
 | invoke git / any subprocess | AC3 (import graph) |
 | call a model | AC3 (import graph) |
-| read the working tree | **AC13** — import graph cannot reach it |
+| read the working tree | **AC13 check (b)** — import graph cannot reach it, byte-identity cannot see it |
 | behaviour injected by a caller | AC12 (signature) |
-| enrichment before the renderer | AC13 (command path) |
+| enrichment before the renderer | **AC13 check (a)** — byte-identity |
 >
 > Residual risk after all three: `unsafe` or a linker directive reaching a symbol
 > no check sees, which is not a thing this renderer does and would be visible in

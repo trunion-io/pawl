@@ -3,9 +3,31 @@
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/model`, `internal/policy`, `internal/cli`
 **Extends:** [PAWL-001](./PAWL-001-claim-capture.md) (delivered, immutable) —
 changes what a claim can record, not how or when it is recorded.
+**Extends:** [PAWL-006](./PAWL-006-policy-gate.md) (delivered, immutable) — AC5
+below changes what its thresholds count.
 **Related:** [PAWL-003](./PAWL-003-coverage-resolution.md),
-[PAWL-006](./PAWL-006-policy-gate.md), [PAWL-007](./PAWL-007-calibration-sampler.md)
-(built), and constitution **C-10**.
+[PAWL-007](./PAWL-007-calibration-sampler.md) (built), and constitution **C-10**.
+
+### What this changes in PAWL-006
+
+Required by [`_spec/README.md`](./README.md) rule 2: a spec that changes
+delivered behaviour declares the extension and states criterion by criterion what
+happens to it. An earlier draft listed PAWL-006 as merely *Related* while AC5
+here altered four of its six criteria, which review caught.
+
+| PAWL-006 | Effect |
+|---|---|
+| AC1 — read thresholds from `.pawl/policy.toml` | **holds**, plus AC6 here reserves a key pattern the file may not carry |
+| AC2 — fail above the line budget | **holds**, over a count AC5 here narrows |
+| AC3 — fail above the must-read ratio | **holds**, over a numerator and denominator AC5 here narrows |
+| AC4 — fail on unclaimed changed lines | **holds**, and AC5 here settles that a contradicted line is not unclaimed |
+| AC5 — sensitive paths need a named check | **holds except** for contradicted claims, which cite no evidence by DECISION-3 and are exempted here |
+| AC6 — exit non-zero and emit the decision | **holds**, unchanged |
+
+Nothing above is superseded. Every PAWL-006 criterion still decides what it
+decided; AC5 here changes only which lines reach the arithmetic, which is why the
+gate stays strictly stricter — AC4 above fails the changeset outright whenever a
+contradiction is present.
 
 ## Stakeholders
 
@@ -269,15 +291,26 @@ a data-loss event. Fail closed on *unrecognised*, not on *not-latest*.
 > needing special handling, they are the same case, and an implementation written
 > from the wrong premise might have treated them as one.
 
-**AC16** — The system shall refuse to write `schema_version` `0.2` unless the
-previous released tag already contains the AC14 reader, and shall say which
-release is missing it.
-`checkable: yes` (once built) — stated as a property of a tree and its tag
-history rather than of a release process, which is what makes it testable at all:
-a test builds a real repository with a previous tag lacking the reader and
-asserts the write is refused, in the shape `internal/e2e/tagscript_test.go`
-already uses. [`PAWL-013`](./PAWL-013-versioning-and-release.md) owns the release
-pipeline this runs inside; it does not own this criterion.
+**AC16** — The release pipeline shall refuse to publish a pawl release that
+writes `schema_version` `0.2` unless the immediately preceding pawl release
+already contains the AC14 reader, naming the release that lacks it.
+`checkable: yes` (once built) — against pawl's own release history, in the shape
+`internal/e2e/tagscript_test.go` already uses: build a repository whose previous
+tag lacks the reader and assert publication is refused.
+>
+> **This is a publication refusal, not a runtime one**, and two earlier drafts
+> got that wrong in opposite directions. The first made it a release-ordering
+> rule with no check. The second made it "refuse to write `0.2` unless the
+> previous released tag contains the reader" — which reads as a check inside
+> `pawl claim`, and cannot work: `pawl claim` runs in a *client* repository,
+> whose tags are the client's software and say nothing about which pawl release
+> shipped. Review caught it. The only place that can see pawl's release history
+> is pawl's release pipeline, which is where the refusal belongs.
+>
+> [`PAWL-013`](./PAWL-013-versioning-and-release.md) owns that pipeline and
+> implements this; the criterion is stated here because it is this spec's
+> compatibility guarantee, and a criterion in the spec that creates the hazard is
+> harder to lose than a note in the spec that owns the machinery.
 
 **This spec ships in two releases, and AC12 belongs to the second.** Review found
 that AC12 and AC16 as first written could not both be satisfied: AC12 mandates
