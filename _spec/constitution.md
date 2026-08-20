@@ -129,3 +129,36 @@ auditing itself, blank-line noise — lived in the seam between git's behaviour
 and our model of it. A mock would have hidden all three.
 
 **checkable:** partially — enforced by review.
+
+## C-10 — Lifecycle state and sample verdict are distinct axes
+
+The system shall represent the lifecycle state of a claim and the calibration
+sample verdict of a claim as two separate fields, and shall derive neither from
+the other.
+
+`checkable: yes` — a record carrying one where the other belongs is detectable.
+
+**Lifecycle state** is what the tool knows about a claim within one changeset:
+emitted at edit time or resolved mechanically at verification time. It is a
+property of the claim's relationship to its own verification.
+
+**Sample verdict** is what a human says about a claim during calibration,
+applied after the fact to build an error rate. It is a property of the claim's
+relationship to reality.
+
+Every combination is meaningful. A claim may be mechanically `contradicted` and
+sampled `immaterial`; it may be mechanically verified and sampled `wrong`. The
+calibration dataset is only useful because it can express all of them.
+
+Collapsing the axes produces a dataset that cannot answer the question
+calibration exists to answer: a binary pass or fail cannot distinguish a claim
+that was false from a claim that was true and did not matter, which is the
+difference between a defect and a threshold that needs moving. It cannot be
+retrofitted onto data already collected, so it binds from before the first
+sample is taken.
+
+> PAWL-007 already splits its sampling into two axes — a binary verdict and an
+> attributable cause. This rule is about a different pair and the two compose:
+> PAWL-007's axes both live inside sample verdict, which is one half of this
+> one. Whether that layering holds under real sampling is untested, because no
+> samples exist.
