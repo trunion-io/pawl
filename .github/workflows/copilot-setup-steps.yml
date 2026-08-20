@@ -1,0 +1,50 @@
+# PAWL-031 — the environment an automated contributor gets.
+#
+# An agent that cannot run the check suite can only assert that its change works,
+# which is the failure this product exists to refuse (C-1). This gives it the
+# means to produce evidence instead.
+#
+# The job name is fixed: it must be `copilot-setup-steps` to be recognised.
+name: copilot setup steps
+
+on:
+  workflow_dispatch:
+  # AC5 — an environment definition is only known to work once it has run. Left
+  # untriggered it rots quietly and fails first at the moment an agent needs it,
+  # so a change to this file verifies itself before it merges.
+  push:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+  pull_request:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    # AC3 — read only. An agent's work is reviewed as a pull request like anyone
+    # else's; an environment that could push, publish or sign would let it bypass
+    # the gates that make the work reviewable. PAWL-025 AC3 draws the same line.
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # AC2 — the version comes from go.mod, not from a number repeated here. A
+      # second place naming the toolchain is a second place for it to go stale,
+      # and the reproducible-build property depends on it being the pinned one.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Nothing else is needed. go.mod has no require block, so there are no
+      # modules to resolve, and the suite makes no network calls — it builds real
+      # git repositories in temporary directories (C-9), and git is already on
+      # the runner.
+      #
+      # AC1 and AC4: the same target CI runs, not a reduced one. A subset would
+      # let an agent report green against a weaker bar than its pull request will
+      # face, which is worse than no environment at all — evidence for the wrong
+      # claim.
+      - name: Verify the environment can run the gate
+        run: make check

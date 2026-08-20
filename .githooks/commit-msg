@@ -1,0 +1,11 @@
+#!/bin/sh
+# PAWL-027 AC1–AC4 — validate the message while it is still being written.
+#
+# A local hook is a convenience, never a control: anyone can pass --no-verify,
+# and a fresh clone has no hooks at all until core.hooksPath is set. CI is the
+# enforcement (see .github/workflows/commits.yml). This exists so the feedback
+# arrives at the moment it is cheap to act on.
+set -e
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+# shellcheck disable=SC2086
+exec go run ./internal/release/lintcommit "$1" $staged

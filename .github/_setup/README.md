@@ -1,0 +1,85 @@
+# Repository setup
+
+The GitHub-side configuration this repository expects, recorded as files so it
+can be reviewed in a diff and reapplied from scratch.
+
+`_setup` rather than `setup`, for the same reasons as [`_spec`](../../_spec):
+it sorts above the source directories, it marks itself as not-source, and it
+stays out of tooling globs.
+
+These are **not applied automatically.** Applying them changes who can merge what,
+so it is a deliberate act with a human behind it.
+
+## Why these live in the tree
+
+PAWL-025 records three criteria as `checkable: partially` — AC7 (secret scanning),
+AC10 (checks required before merge) and AC11 (no force-push or deletion) — on the
+grounds that they are repository settings rather than properties of the tree.
+That reasoning is sound and these files do not overturn it: GitHub remains the
+enforcement point, and nothing here proves what is live.
+
+What they do change is that the *intended* configuration is now reviewable,
+diffable, and recoverable. A setting that exists only in a web form is one nobody
+can review and nobody can restore.
+
+## Applying
+
+Order matters. The ruleset requires status checks and a pull request, so applying
+it to an empty repository blocks the first push of `main`.
+
+```bash
+# 1. Repository settings
+gh api -X PATCH repos/trunion-io/pawl --input .github/_setup/repo.json
+
+# 2. Push main and at least one branch first, then the ruleset
+gh api -X PUT repos/trunion-io/pawl/rulesets/<id> \
+  --input .github/_setup/ruleset-main.json
+
+# On a fresh repository there is no id yet, so create rather than update:
+gh api -X POST repos/trunion-io/pawl/rulesets \
+  --input .github/_setup/ruleset-main.json
+```
+
+Two settings have no representation in `repo.json` because they are separate
+endpoints:
+
+```bash
+gh api -X PUT repos/trunion-io/pawl/automated-security-fixes
+gh api -X PUT repos/trunion-io/pawl/private-vulnerability-reporting
+```
+
+The second is what makes the reporting route in [`SECURITY.md`](../../SECURITY.md)
+resolve. Without it that link is a dead end, which is worse than not offering one.
+
+## Choices in here that are load-bearing
+
+**Squash only.** `allow_merge_commit` and `allow_rebase_merge` are false so the
+repository offers what the ruleset permits. They were both true, which put buttons
+in front of a maintainer that the ruleset would then refuse — a UI that disagrees
+with the rules teaches people to distrust the rules.
+
+**`squash_merge_commit_title: PR_TITLE`.** The default, `COMMIT_OR_PR_TITLE`, uses
+the branch commit's subject when a pull request has exactly one commit and the
+pull request title otherwise. That makes the subject reaching `main` depend on how
+many commits a branch happens to have. PAWL-027 derives the version from what
+reaches `main`, so the input to versioning must not be decided by a coincidence.
+
+**`squash_merge_commit_message: COMMIT_MESSAGES`.** This is what carries the
+individual commit bodies into the squashed commit, and with them the
+`Verdict-Affecting:` trailers that PAWL-027 AC3 reads. `PR_BODY` would discard
+them, and the version computation would silently stop seeing declarations that
+were correctly made.
+
+**No bypass beyond organisation admin.** The ruleset originally granted bypass to
+the admin repository role and to deploy keys as well. A repository role is an
+everyday identity rather than a deliberate one, and a deploy key is a credential
+that cannot exercise judgement at all. One break-glass route held by a person is
+a different thing from rules that are advisory.
+
+## What is not here
+
+- **Secret values.** Nothing readable, and there are none.
+- **Proof of what is live.** These files say what is intended. Confirm the live
+  state with `gh api`, and confirm protection actually holds by attempting a push
+  and being refused — a readback tells you what the API stored, not what it
+  enforces.

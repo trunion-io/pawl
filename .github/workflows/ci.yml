@@ -6,6 +6,10 @@ name: check
 
 on:
   pull_request:
+  # merge_group: the queue builds its own ref and waits for the required
+  # checks to report on it. Without this trigger the entry sits until
+  # check_response_timeout_minutes expires and then fails, every time.
+  merge_group:
   push:
     branches: [main]
 

@@ -1,0 +1,9 @@
+#!/bin/sh
+# Run the same gate CI will run, before the push rather than after it.
+#
+# `main` is protected and requires four passing checks, so a push that fails
+# here would only have failed later and more slowly. Skip with --no-verify when
+# you are pushing work in progress to a branch on purpose.
+set -e
+echo "pre-push: make check (skip with --no-verify)"
+exec make check
