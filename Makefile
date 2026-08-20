@@ -137,7 +137,15 @@ check-tagger: ## Lint: no workflow writes a tag directly
 	fi; \
 	bad=""; \
 	for f in $$files; do \
-		if sed -e ':a' -e '/\\$$/{N;s/\\\n//;ba' -e '}' "$$f" \
+		joined=$$(sed -e ':a' -e '/\\$$/{N;s/\\\n//;ba' -e '}' "$$f") || { \
+			echo "check-tagger: FAIL — cannot read $$f; the check did not run"; \
+			exit 1; \
+		}; \
+		case "$$joined" in \
+			*git*) ;; \
+			*) continue ;; \
+		esac; \
+		if printf '%s\n' "$$joined" \
 			| grep -qE 'git[^;|&]*[[:space:]]tag([[:space:]]|$$)'; then \
 			bad="$$bad $$f"; \
 		fi; \
