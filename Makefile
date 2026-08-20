@@ -118,21 +118,30 @@ hooks: ## Point git at .githooks (PAWL-027) — one command per clone
 .PHONY: hooks
 
 check-tagger: ## Lint: no workflow writes a tag directly
-	@# A lint, and only a lint. It greps for a git invocation reaching `tag`,
-	@# which catches every realistic form including `git -c k=v tag` and an
-	@# absolute path — but a grep is not a shell parser and never will be, so
-	@# indirection like `g=git; $$g tag` passes it.
+	@# A lint, and only a lint. Line continuations are joined first, so a git
+	@# invocation split across lines is still seen — but a grep is not a shell
+	@# parser and never will be, and indirection like `g=git; $$g tag` passes it.
 	@#
-	@# What actually guarantees the behaviour is TestTagScript* in internal/e2e:
-	@# real git, a real bare remote, identity unset. An earlier version of this
-	@# target also grepped tag.sh for `git config user.name`, which reported ok
-	@# when both lines were commented out — a false assurance standing beside a
-	@# real one. It was removed rather than tightened, because the test already
-	@# establishes the property and this cannot.
-	@bad=$$(grep -lE 'git[^;|&]*[[:space:]]tag([[:space:]]|$$)' \
-		.github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true); \
+	@# What guarantees the behaviour is TestTagScript* in internal/e2e: real git,
+	@# a real bare remote, identity unset. An earlier version also grepped tag.sh
+	@# for `git config user.name`, which reported ok with both lines commented
+	@# out — a false assurance beside a real one. It was removed rather than
+	@# tightened, because the test already establishes the property and a grep
+	@# cannot.
+	@files=$$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null); \
+	if [ -z "$$files" ]; then \
+		echo "check-tagger: FAIL — no workflow files found; the check cannot run"; \
+		exit 1; \
+	fi; \
+	bad=""; \
+	for f in $$files; do \
+		if sed -e ':a' -e '/\\$$/{N;s/\\\n//;ba' -e '}' "$$f" \
+			| grep -qE 'git[^;|&]*[[:space:]]tag([[:space:]]|$$)'; then \
+			bad="$$bad $$f"; \
+		fi; \
+	done; \
 	if [ -n "$$bad" ]; then \
-		printf '%s\n' "$$bad" | sed 's|^|  writes a tag directly: |'; \
+		for f in $$bad; do echo "  writes a tag directly: $$f"; done; \
 		echo "check-tagger: FAIL — tags are written by .github/scripts/tag.sh only,"; \
 		echo "              which is the one place that configures a tagger."; \
 		exit 1; \
