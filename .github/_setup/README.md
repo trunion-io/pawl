@@ -40,6 +40,25 @@ gh api -X POST repos/trunion-io/pawl/rulesets \
   --input .github/_setup/ruleset-main.json
 ```
 
+Actions settings live on their own endpoints and are recorded in
+`actions.json`, which is a record rather than a single request body:
+
+```bash
+gh api -X PUT repos/trunion-io/pawl/actions/permissions \
+  -F enabled=true -f allowed_actions=all
+gh api -X PUT repos/trunion-io/pawl/actions/permissions/workflow \
+  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false
+```
+
+`default_workflow_permissions: read` is load-bearing: PAWL-025 AC3 requires each
+job to hold the minimum token it needs, and a read-only default is what makes the
+`permissions:` block in each workflow an increase from a safe floor rather than a
+decrease from a permissive one.
+
+`can_approve_pull_request_reviews: false` keeps `GITHUB_TOKEN` from approving
+pull requests. Nothing here should be able to satisfy a review requirement by
+running.
+
 Two settings have no representation in `repo.json` because they are separate
 endpoints:
 
