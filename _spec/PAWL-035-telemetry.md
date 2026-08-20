@@ -1,7 +1,7 @@
 # PAWL-035 — Telemetry
 
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/telemetry`, `internal/cli`
-**Related:** [PAWL-007](./PAWL-007-calibration-sampler.md) (drafted),
+**Related:** [PAWL-007](./PAWL-007-calibration-sampler.md) (built),
 [PAWL-012](./PAWL-012-configuration.md) (drafted), constitution **C-6**.
 Nothing here supersedes anything.
 
@@ -40,8 +40,13 @@ as well as protobuf over gRPC, and the JSON form is `encoding/json` and
 `net/http` — both standard library. The Go SDK is not: it brings a module graph,
 and decision 6 in `AGENTS.md` says a tool asking a security-conscious client to
 audit a dependency tree before it can verify anything undermines its own
-argument. Speaking the protocol gets every OTLP receiver in existence; importing
-the SDK gets the same receivers and a `require` block.
+argument.
+
+This reaches receivers that accept OTLP/HTTP with JSON. It does **not** reach
+every OTLP endpoint: a receiver may expose gRPC only, or HTTP with
+binary-protobuf only, and neither will accept this. A client in that position
+puts a collector in front, which is the ordinary deployment anyway. Claiming
+otherwise would be the overstatement the accompanying claim already records.
 
 > **A correction this spec depends on.** `docs/install.md` states that pawl makes
 > no outbound network calls. That is already untrue: `internal/selfmanage` holds
@@ -53,10 +58,16 @@ the SDK gets the same receivers and a `require` block.
 
 ## Emission
 
-**AC1** — The system shall emit telemetry as OTLP over HTTP using the JSON
-encoding.
-`checkable: yes` (once built) — against the OTLP schema, and by a receiver
+**AC1** — The system shall emit each invocation as one OTLP log record, in an
+`ExportLogsServiceRequest`, JSON-encoded, by HTTP POST to the receiver's
+`/v1/logs` path.
+`checkable: yes` (once built) — against that request schema, and by a receiver
 accepting it.
+>
+> The signal has to be named. OTLP's logs and metrics are different request
+> messages on different paths, and "OTLP" alone selects neither. An invocation is
+> a discrete event with typed attributes, which is a log record; aggregate
+> counters would be metrics and are out of scope below.
 
 **AC2** — The system shall implement OTLP using the standard library only, and
 `go.mod` shall gain no `require` entry.
@@ -79,15 +90,24 @@ this is the behaviour most likely to be discovered rather than read. A client
 finding an outbound connection with `strace` before finding it in the README is
 the one outcome this feature cannot survive.
 
-**AC17** — On the first invocation that would emit, the system shall print a
-notice to standard error naming the endpoint and the configuration key that
-disables it.
-`checkable: yes` (once built) — once, not every run. Documentation is where a
-client looks after they are surprised; the notice is what stops the surprise.
+**AC17** — The system shall print a notice to standard error, naming the endpoint
+and the configuration key that disables it, on the first invocation that would
+emit for a given tool version and endpoint, and shall record that it has done so
+in the user's state directory.
+`checkable: yes` (once built) — scoped and persisted, because "once" alone is not
+implementable. Per version and endpoint, so an upgrade or a repointed collector
+says so again — both are changes a client should be told about. Per user rather
+than per repository, so it is not repeated for every checkout. If the state
+cannot be written the notice prints, since a notice too often is a smaller
+failure than one never seen.
 
-**AC18** — The system shall bound the time spent emitting and shall not exceed it.
-`checkable: yes` (once built) — a gate is on a developer's critical path and in
-CI. A slow or blackholed collector must cost a bounded pause, not a hung build.
+**AC18** — The system shall spend no more than two seconds in total on emission,
+measured across name resolution, connection, write and read.
+`checkable: yes` (once built) — a number, because "bounded" is satisfied by
+thirty seconds and thirty seconds on a developer's critical path is a broken
+tool. Two seconds is a guess at the right order of magnitude and is stated so it
+can be argued with; a blackholed collector costs that once per invocation and
+nothing else.
 
 **AC4** — The system shall provide configuration that disables telemetry
 entirely, and shall then collect and emit nothing.
@@ -122,12 +142,21 @@ an exact value.
 > identity.
 
 **AC9** — Where the gate runs, the system shall record which rules fired, as an
-enumeration of the rule identifiers PAWL-006 defines.
-`checkable: yes` (once built)
+enumeration of exactly: `changeset_size`, `must_read_ratio`, `unclaimed_lines`,
+`undetermined_claims`, `sensitive_path_needs_named_check`.
+`checkable: yes` (once built) — enumerated here rather than by reference. PAWL-006
+defines the gate's criteria and names no rule identifiers at all; the strings live
+in `internal/policy/policy.go`, and `undetermined_claims` appears nowhere in
+PAWL-006. Citing that spec for this enum would have pointed at a contract that
+does not contain it.
 
 **AC10** — Where `attest` runs, the system shall record whether the attestation
-was produced and whether signing succeeded, as enumerated outcomes.
-`checkable: yes` (once built)
+was produced, as an enumerated outcome.
+`checkable: yes` (once built) — the attestation only. PAWL-005 AC5 is delivered
+and says the system shall not sign: signing is `cosign attest-blob` with a CI
+OIDC token, in a later step pawl does not observe. An earlier draft recorded
+whether signing succeeded, which pawl cannot know and which this spec has no
+standing to change, since it supersedes nothing.
 
 **AC11** — Where an operation fails, the system shall record an enumerated error
 kind and shall not record the error message.
@@ -138,11 +167,15 @@ a record leaving the machine.
 ## What is never recorded
 
 **AC12** — The system shall not record a repository name, remote URL, branch name,
-file path, identifier, claim text, commit message, hostname, username or any
-value derived from them.
+file path, claim identifier, ticket reference, claim text, commit message,
+hostname, username or any value derived from them.
 `checkable: yes` (once built) — enforced by AC6's shape rather than a blocklist,
 which is why AC6 comes first. A blocklist is a list of the leaks someone thought
 of.
+>
+> An earlier draft banned "identifier" unqualified, which contradicted AC9: rule
+> identifiers are fixed strings of ours and must be recorded. The ban is on
+> identifiers of the client's things, not of ours.
 
 **AC13** — The system shall not record a value that is stable across invocations
 and unique to an installation, including any generated installation identifier.
@@ -150,17 +183,33 @@ and unique to an installation, including any generated installation identifier.
 pseudonymous: it links every record from one client into a profile, and adding
 one is the easiest way to turn telemetry into tracking.
 
-**AC14** — The system shall populate OTLP resource attributes explicitly, and
-shall not emit any attribute this spec does not name.
-`checkable: yes` (once built) — **this is where an OTel implementation leaks by
-default.** The semantic conventions populate `host.name`, `process.owner`,
-`process.command_line` and `service.instance.id` without being asked, and every
-one of those violates AC12 or AC13. Hand-written OTLP has no such default, which
-is a second reason not to take the SDK.
+**AC14** — The system shall populate exactly these OTLP resource attributes and no
+others: `service.name` as the constant `pawl`, `service.version` as the tool
+version, `os.type`, and `host.arch`.
+`checkable: yes` (once built) — an enumerated allowlist, because "populate
+explicitly" names nothing and is satisfied by an empty resource or by anything at
+all.
+>
+> An earlier draft justified this by claiming the OpenTelemetry Go SDK populates
+> `host.name`, `process.owner`, `process.command_line` and `service.instance.id`
+> without being asked. That is not established: the SDK's default resource uses
+> service and SDK detectors, host and process detectors are opted into, and
+> semantic conventions define what an attribute *means* rather than causing it to
+> be collected. The assertion was made without checking and is removed. The
+> allowlist stands on its own — whatever an implementation would otherwise
+> attach, only these four leave.
 
-**AC15** — The system shall provide a command that prints what would be emitted.
-`checkable: yes` (once built) — a client must be able to read exactly what leaves
-before any of it does. "Anonymised" is a claim about a file they can open.
+**AC15** — The system shall provide a flag that runs an invocation normally,
+prints the record that invocation produced to standard output at its end, and
+emits nothing.
+`checkable: yes` (once built) — a client must be able to read exactly what would
+leave, and "anonymised" is a claim about something they can open.
+>
+> A preview *before* the run cannot exist: AC7 records the exit outcome and the
+> wall-clock duration, and neither is knowable until the invocation finishes. So
+> it is a dry run rather than a preview — the work happens, the record is built
+> and shown, and the emission is skipped. The dry run itself emits nothing, which
+> would otherwise be the obvious way to defeat the point of it.
 
 ## Non-functional
 
