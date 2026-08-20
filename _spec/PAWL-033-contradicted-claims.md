@@ -30,11 +30,18 @@ reading the diff resolves it.
 This is the reverse loop, and it is the point at which implementation falsifies
 design. Most harnesses discard it as a retry.
 
-**Why now rather than later.** This adds a value to a record schema. No
-calibration data exists yet — PAWL-007 is drafted and unbuilt, and the sampler
-has nothing sampled. Once sampling is live, adding this means backfilling
-labelled data or accepting a permanent hole in the dataset. The window is open
-and closes on its own.
+**Why now rather than later.** This adds a value to a record schema. The sampler
+is built — `internal/calibrate` ships and `pawl calibrate` is wired in
+`internal/cli` — but nothing has been sampled, because that needs sustained real
+use rather than more code. The window is therefore about the *corpus*, not the
+tool: once verdicts exist, adding a kind means either backfilling labelled data
+or accepting a hole in it.
+
+> An earlier draft said PAWL-007 was "drafted and unbuilt", which is false and was
+> the load-bearing premise of this paragraph. PAWL-007's own status line still
+> reads `DRAFTED, NOT BUILT` and names `internal/calibrate` as not existing, while
+> the package ships — the stale header is the likely source of the error, and
+> correcting it belongs to that spec.
 
 > **This spec is worth writing now and may not be worth building yet.** Its value
 > depends on something consuming the signal, and routing a contradiction to the
@@ -49,7 +56,9 @@ and closes on its own.
 `checkable: yes` (once built)
 >
 > A kind rather than a new lifecycle field, decided against an earlier draft that
-> proposed the field. Three arguments, and the second is the one that settles it.
+> proposed the field. It is the fifth kind, not the fourth — `constraint` exists
+> and is documented, unused only because `spec:` evidence cannot resolve until
+> PAWL-009 is built. Three arguments, and the second settles it.
 >
 > `Kind` is already the axis for what the agent established at edit time — took
 > for granted, considered and rejected, could not establish, believes the code
@@ -104,14 +113,33 @@ in a ratio it would dilute the measure it cannot belong to.
 
 **AC6** — The system shall reject a policy file carrying any tolerance, threshold
 or waiver for contradicted claims, naming the offending key.
-`checkable: yes` (once built) — and this is the one deliberate exception to C-5.
+`checkable: yes` (once built) — and this is not an exception to C-5, which it
+could not be.
 
-> C-5 makes thresholds the client's, because a supplier who both writes the code
-> and sets the bar it clears is running theatre. This carves one thing out of
-> that: a tolerance for contradictions is a tolerance for shipping against a
-> contract known to be false. If it were configurable, the first response to an
-> inconvenient contradiction would be to raise it. The ratchet does not turn
-> backwards.
+> C-5 says the system shall read every gate **threshold** from the policy file and
+> ship no threshold that cannot be overridden there. Contradiction blocking is not
+> a threshold: there is no quantity, no bar, and nothing to tune. It is an
+> invariant, and C-5 does not reach it.
+>
+> An earlier draft called this "the one deliberate exception to C-5", which a
+> drafted spec has no standing to make — the constitution says in its opening
+> lines that it outranks every spec and that a spec conflicting with it is the
+> thing that is wrong. Framing the same behaviour as an exception rather than as
+> out of scope would have been a spec quietly amending the constitution.
+>
+> The reason it must not be tunable is unchanged: a tolerance for contradictions
+> is a tolerance for shipping against a contract known to be false, and if it were
+> configurable the first response to an inconvenient contradiction would be to
+> raise it. The ratchet does not turn backwards.
+>
+> **This is a departure from how unknown policy keys are handled today, and the
+> departure is the point.** PAWL-026 AC5 makes an unrecognised key a warning
+> rather than a rejection, deliberately, so a policy file written for a later pawl
+> still loads against an older binary. That reasoning holds for a key the gate
+> does not act on. It does not hold for a key whose whole purpose is to weaken a
+> refusal: warning and continuing would leave the operator believing they had
+> configured a tolerance while the gate ignored it, which is worse than either
+> honouring it or refusing it.
 
 **AC7** — When the gate fails only because of contradicted claims, it shall exit
 with a status distinct from a threshold failure.
@@ -139,19 +167,25 @@ name.
 is what a test can establish. Stating it over *all* possible verifier inputs
 would be a criterion no run could satisfy.
 
-**AC12** — The system shall raise the predicate `schemaVersion` to `0.3` and shall
-leave the predicate type URL unchanged.
+**AC12** — The system shall raise the predicate `schemaVersion` to `0.3` and the
+claim record `schema_version` to `0.2`, and shall leave the predicate type URL
+unchanged.
 `checkable: yes` (once built) — the mechanism PAWL-011 built for this. AC5 there
 raised `schemaVersion` to `0.2` for an additive change while holding the URL
 fixed, because the URL describes the artifact rather than the tool; it survived
 the `factory-kit` → `pawl` rename on that reasoning and an added enum value is a
 smaller thing than a rename.
+>
+> Both versions move, because both records gain the value. `ClaimSchemaVersion` is
+> `0.1` in `internal/model` and the claim log is where a `contradicted` kind is
+> written; leaving it there while AC10 hard-fails on an unrecognised kind would
+> give an older binary a record it must reject and no version to reject it *by*.
 
 ## Non-functional
 
 - **A contradicted claim is not sampled, and this spec does not change that.** An
   earlier draft said it remained samplable and could be labelled `immaterial`.
-  Both halves were wrong. PAWL-007 AC1 selects *cleared* changesets, and AC4 below
+  Both halves were wrong. PAWL-007 AC1 selects *cleared* changesets, and AC4 above
   makes a changeset carrying a contradiction fail, so it never enters the sampled
   population. And `immaterial` is from the four-value proposal PAWL-007 explicitly
   rejected for conflating its two axes.
@@ -165,7 +199,13 @@ smaller thing than a rename.
   something does, the value here is that the record exists and is not lost in
   `undetermined`.
 
-## Open decisions
+**AC13** — The system shall not select a changeset carrying a contradicted claim
+for calibration sampling.
+`checkable: yes` (once built) — the sampler builds a corpus of changesets that
+*cleared*, and a changeset the gate refused is not one of those. Without this the
+exclusion is an assertion about code that does not implement it.
+
+## Decisions taken here
 
 **DECISION-1 — resolved: raise `schemaVersion`.** The predicate carries
 `schemaVersion`, currently `0.2` in `internal/model`, and PAWL-011 AC5 raised it
@@ -184,9 +224,10 @@ PAWL-011 says it describes the artifact rather than the tool and it survived the
 > What a consumer should do on meeting a `schemaVersion` it does not recognise is
 > named as separate in PAWL-011 and stays separate here.
 
-**DECISION-2 — resolved: a fourth kind.** An earlier draft proposed a lifecycle
+**DECISION-2 — resolved: a fifth kind.** An earlier draft proposed a lifecycle
 state and recorded this as open. Settled in favour of a kind, for the reasons
-under AC1: `Kind` is already the edit-time axis, a kind is immutable where a
+under AC1 — a fifth, not a fourth: `assumption`, `rejected_alternative`,
+`undetermined` and `constraint` already exist: `Kind` is already the edit-time axis, a kind is immutable where a
 lifecycle state is not, and `undetermined` being an unknown while `contradicted`
 is a known makes the latter the higher-order signal rather than a nested one.
 

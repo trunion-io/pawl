@@ -3,7 +3,7 @@
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/render`, `internal/cli`
 **Related:** [PAWL-004](./PAWL-004-reading-list.md) (delivered),
 [PAWL-006](./PAWL-006-policy-gate.md) (delivered),
-[PAWL-010](./PAWL-010-documentation.md) (built),
+[PAWL-010](./PAWL-010-documentation.md) (drafted),
 [PAWL-033](./PAWL-033-contradicted-claims.md) (drafted).
 Nothing here supersedes anything.
 
@@ -42,9 +42,7 @@ markdown as its only output.
 
 **AC2** — The renderer shall not read the working tree, invoke git, open a network
 connection, or call a model.
-`checkable: partially` — closed in the same changeset by AC3 over the import
-graph, plus a test rendering in a directory that is neither a repository nor
-contains project files.
+`checkable: yes` (once built) — closed by AC3, which is what actually decides it.
 >
 > Rendering successfully outside a repository does not establish this on its own,
 > which an earlier draft claimed it did. `git --version` succeeds anywhere, a
@@ -53,11 +51,12 @@ contains project files.
 > directory. The scenario shows the renderer does not *depend* on a repository; it
 > cannot show nothing was invoked.
 >
-> What each half establishes: AC3 catches a dependency that could reach any of
-> them, and the scenario catches a renderer that silently needs a tree. Between
-> them the failure has to be a runtime call through an interface the module
-> already imports for another reason, which is narrow enough to name rather than
-> claim closed.
+> An earlier draft narrowed AC3 to "the git or repository-access layer", which
+> left `net/http` and `os/exec` reachable and therefore left two of AC2's four
+> constraints unenforced while calling the criterion closed. Over the whole import
+> graph there is no package present through which a network call, a subprocess or
+> a model API could be made — which decides AC2 statically, rather than inferring
+> it from a scenario that would also pass a renderer quietly calling out.
 
 > **AC2 is the whole spec and every other criterion is a consequence.** If the
 > renderer can reach the repository, someone will add a section summarising the
@@ -65,8 +64,9 @@ contains project files.
 > Constraining the input means a section that cannot be populated from the record
 > cannot be written at all.
 
-**AC3** — The renderer module shall import nothing from the git or
-repository-access layer.
+**AC3** — The renderer module's import graph shall contain no repository-access
+package, and no package capable of network access or subprocess execution,
+including `net/http`, `net`, `os/exec` and any transitive reacher of them.
 `checkable: yes` (once built) — over the import graph, which is a different claim
 from AC2 and fails independently. It catches a direct dependency; a call reached
 indirectly at runtime is AC2's to catch, which is why both exist.

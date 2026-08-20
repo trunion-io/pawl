@@ -130,25 +130,31 @@ and our model of it. A mock would have hidden all three.
 
 **checkable:** partially — enforced by review.
 
-## C-10 — Lifecycle state and sample verdict are distinct axes
+## C-10 — Mechanical resolution and sample verdict are distinct axes
 
 The system shall represent the mechanical resolution of a claimed span and the
 calibration sample verdict of that span as two separate fields, and shall derive
 neither from the other.
 
-**checkable:** partially — no automated check exists. Enforced by review.
+**checkable:** yes — `trunion.io/pawl/internal/e2e.TestSampleVerdictAndMechanicalVerdictAreSeparateFields`
 
 > An earlier draft said "the lifecycle state of a claim", made the rule
-> `checkable: yes` with no test named, and bound both immediately. All three were
-> wrong. `Claim` has no lifecycle-state field and gains none — `contradicted` is a
+> `checkable: yes` with no test named, and then `partially` with no check at all.
+> All of those were wrong. `Claim` has no lifecycle-state field and gains none — `contradicted` is a
 > kind (PAWL-033) — so the rule would have bound something that does not exist,
 > and this file's own convention is that `checkable: yes` names the test, as C-1,
 > C-3 and C-4 all do.
 >
-> Restated over what is already there: `ResolvedClaim.Coverage` and `SpanVerdict`
-> carry the mechanical resolution, PAWL-007 records the sample verdict, and the
-> rule is that those must not collapse into one another. That binds today and is
-> already satisfied.
+> Restated over what is already there: `SampledSpan.Verdict` carries the
+> mechanical resolution and `SampledSpan.Reviewed` the sample verdict. The rule is
+> that those must not collapse, and the named test holds it — a cleared span
+> reviewed as a false clear must keep both values, which is the disagreement the
+> false-clear rate is built from and which a single field could not express.
+>
+> Marking it `partially — enforced by review` was the second error. The property
+> is mechanically testable against fields that already exist, so assigning it to
+> review indefinitely would have made it permanent attention debt for want of
+> fifteen lines.
 
 **Lifecycle state** is what the tool knows about a claim within one changeset:
 emitted at edit time or resolved mechanically at verification time. It is a
@@ -158,15 +164,21 @@ property of the claim's relationship to its own verification.
 applied after the fact to build an error rate. It is a property of the claim's
 relationship to reality.
 
-Every combination is meaningful. A claim may be mechanically `unverified` and
-sampled `immaterial` — nothing exercised it and it did not matter; it may be
-mechanically covered and sampled `wrong` — a passing test over a false claim. The
-calibration dataset is only useful because it can express all of them.
+Every combination that can occur is meaningful. A span may be mechanically
+`clear` and sampled `false_clear` — the machine collapsed it and a human says it
+should have been read, which is the number the whole sampler exists to produce.
+It may be `acknowledged` and sampled `correct` — an agent said there was nothing
+to assume and was right.
 
-Neither axis is the claim's *kind*, which is a third thing: what the agent
-established at edit time, fixed when the record is written and never revised.
-`contradicted` is a kind for that reason (PAWL-033), and a contradicted claim is
-still sampled like any other.
+Not every pairing occurs: `internal/calibrate/store.go` admits only `clear` and
+`acknowledged` spans, so an `unverified` span has no sample verdict at all. The
+rule is that the two axes must not be collapsed into one another, not that the
+product of their values is populated.
+
+The claim's *kind* is a third thing again — what the agent established at edit
+time, fixed when the record is written. `contradicted` is a kind for that reason
+(PAWL-033), and a contradicted claim is not sampled at all, because its changeset
+fails and the sampler selects cleared ones.
 
 Collapsing the axes produces a dataset that cannot answer the question
 calibration exists to answer: a binary pass or fail cannot distinguish a claim
