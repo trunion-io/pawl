@@ -171,41 +171,56 @@ check-criteria: ## C-1 — a `checkable: yes` that names no existing test is ass
 	@have=$$(mktemp); rep=$$(mktemp); \
 	trap 'rm -f "$$have" "$$rep"' EXIT; \
 	base=$$(cat _spec/.criteria-debt 2>/dev/null || echo 0); \
-	grep -rhoE '^func (Test|Fuzz)[A-Za-z0-9_]+' --include=*_test.go . \
+	case "$$base" in ''|*[!0-9]*) \
+	  echo "check-criteria: FAIL — _spec/.criteria-debt is not a number: '$$base'"; \
+	  exit 1;; \
+	esac; \
+	grep -rhoE '^func (Test|Fuzz)[A-Za-z0-9_]+' --include='*_test.go' . \
 	  | sed 's/^func //' | sort -u > "$$have"; \
-	built=$$(grep -E '^\| `PAWL-[0-9]{3}' _spec/README.md | grep -viE 'not built' \
-	  | grep -iE '\*\*built\*\*|delivered' | grep -oE 'PAWL-[0-9]{3}' | sort -u); \
-	grep -rnE '\*{0,2}checkable:?\*{0,2}[[:space:]]+yes' _spec/*.md | while IFS= read -r l; do \
-	  f=$${l%%:*}; r=$${l#*:}; n=$${r%%:*}; t=$${r#*:}; tl=$${t#*yes}; \
+	built=$$(awk -F'|' '/^\| `PAWL-[0-9]{3}/ { \
+	    if (!match($$2, /PAWL-[0-9][0-9][0-9]/)) next; \
+	    id = substr($$2, RSTART, RLENGTH); \
+	    s = tolower($$3); \
+	    if (s ~ /not built/) next; \
+	    if (s ~ /built/ || s ~ /delivered/) print id; \
+	  }' _spec/README.md | sort -u); \
+	grep -rnE '\*{0,2}checkable:?\*{0,2}[[:space:]]+(yes|partially)' _spec/*.md | while IFS= read -r l; do \
+	  f=$${l%%:*}; r=$${l#*:}; n=$${r%%:*}; t=$${r#*:}; \
+	  case "$$t" in *"checkable:** yes"*|*'checkable: yes'*) lvl=yes;; *) lvl=partial;; esac; \
 	  key=$$(printf '%s' "$$f" | grep -oE 'PAWL-[0-9]{3}'); \
-	  name=$$(printf '%s' "$$tl" | grep -oE '(Test|Fuzz)[A-Za-z0-9_]+' | head -1); \
+	  name=$$(printf '%s' "$$t" | grep -oE '`[^`]*`' \
+	    | grep -oE '(Test|Fuzz)[A-Za-z0-9_]+' | head -1); \
+	  tl="$$t"; \
 	  if [ -n "$$name" ]; then \
 	    grep -qx "$$name" "$$have" || printf 'BROKEN\t%s:%s\t%s\n' "$$f" "$$n" "$$name" >> "$$rep"; \
-	  elif printf '%s' "$$tl" | grep -q '(once built)'; then \
-	    if [ -n "$$key" ] && printf '%s\n' "$$built" | grep -qx "$$key"; then \
-	      printf 'UNREDEEMED\t%s:%s\tshipped; no test named\n' "$$f" "$$n" >> "$$rep"; fi; \
-	  else \
-	    printf 'UNEVIDENCED\t%s:%s\tasserts yes, names nothing\n' "$$f" "$$n" >> "$$rep"; \
+	  elif [ "$$lvl" = yes ]; then \
+	    if printf '%s' "$$tl" | grep -q '(once built)'; then \
+	      if [ -n "$$key" ] && printf '%s\n' "$$built" | grep -qx "$$key"; then \
+	        printf 'UNREDEEMED\t%s:%s\tshipped; no test named\n' "$$f" "$$n" >> "$$rep"; fi; \
+	    else \
+	      printf 'UNEVIDENCED\t%s:%s\tasserts yes, names nothing\n' "$$f" "$$n" >> "$$rep"; \
+	    fi; \
 	  fi; \
 	done; \
 	broken=$$(grep -c '^BROKEN' "$$rep" || true); \
-	debt=$$(wc -l < "$$rep" | tr -d ' '); \
+	debt=$$(grep -vc '^BROKEN' "$$rep" || true); \
 	if [ "$$broken" -gt 0 ]; then \
 	  grep '^BROKEN' "$$rep" | sed 's/^/  /'; \
 	  echo "check-criteria: FAIL — a criterion names a test that does not exist."; \
 	  echo "                C-1: an asserted-but-missing test looks like rigour."; \
 	  exit 1; \
 	fi; \
-	if [ "$$debt" -gt "$$base" ]; then \
+	if [ "$$debt" -ne "$$base" ]; then \
 	  awk -F'\t' '{split($$2,a,":"); sub(/^_spec\//,"",a[1]); c[a[1]]++} \
 	    END {for (k in c) printf "  %-46s %d\n", k, c[k]}' "$$rep" | sort -k2 -rn | head -5; \
-	  echo "check-criteria: FAIL — unevidenced criteria rose $$base -> $$debt."; \
-	  echo "                Name the test, or say 'checkable: no' and why."; \
+	  if [ "$$debt" -gt "$$base" ]; then \
+	    echo "check-criteria: FAIL — unevidenced criteria rose $$base -> $$debt."; \
+	    echo "                Name the test, or say 'checkable: no' and why."; \
+	  else \
+	    echo "check-criteria: FAIL — debt fell $$base -> $$debt; the ratchet must tighten."; \
+	    echo "                Set _spec/.criteria-debt to $$debt."; \
+	  fi; \
 	  exit 1; \
 	fi; \
-	if [ "$$debt" -lt "$$base" ]; then \
-	  echo "check-criteria: ok — debt $$debt (was $$base). Lower _spec/.criteria-debt to $$debt."; \
-	else \
-	  echo "check-criteria: ok — $$(grep -c . "$$have") tests exist; every named one resolves; debt $$debt (ratchet)"; \
-	fi
+	echo "check-criteria: ok — $$(grep -c . "$$have") tests exist; every named one resolves; debt $$debt"
 .PHONY: check-criteria

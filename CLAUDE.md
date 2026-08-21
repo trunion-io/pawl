@@ -52,11 +52,11 @@ Other unblocked work, in rough order of value:
 
 All eight `checkable: partially` criteria in the delivered specs now have checks
 behind them, recorded in
-[`PAWL-022`](./_spec/PAWL-022-closing-partial-criteria.md). **Those specs still
-say `partially`** — the checks were recorded by reference because delivered
-specs were immutable at the time. Grep will mislead you; read PAWL-022. Under the
-current rule those specs are unsigned and therefore editable, so repointing the
-eight fields in place is available work.
+[`PAWL-022`](./_spec/PAWL-022-closing-partial-criteria.md), which is now
+**retired**: once immutability moved to signature its eight criteria were folded
+back into PAWL-003, PAWL-004 and PAWL-006, so those specs name their tests
+directly and grep no longer misleads you. PAWL-006 AC6 stays `partially` on
+purpose — its workflow-ordering half cannot be asserted from this repository.
 
 If you write a new `checkable: partially`, close it in the same changeset. That
 field is where a criterion goes to be forgotten: two of these were found in a
