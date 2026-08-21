@@ -32,12 +32,12 @@ human, the system shall treat it as needing a human.
 
 **AC4** — The system shall exclude its own claim log from the changeset it
 analyses.
-`checkable: partially` — `gitutil.DEFAULT_EXCLUDES`; no dedicated test.
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestClaimLogIsExcludedFromTheChangeset`
 **Found in live demo, not by the suite.**
 
 **AC5** — The system shall exclude blank lines and bare delimiters from the
 reading list, and shall treat comments as reviewable.
-`checkable: partially` — `resolve._is_reviewable`; no dedicated test.
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestNonSemanticLinesAreExcludedButCommentsAreNot`
 Comments cost ratio deliberately: agents write plenty of wrong ones.
 
 **AC6** — The system shall report changed lines, must-read lines and the

@@ -129,7 +129,7 @@ the tracker issue it came from. The parts that matter:
 
 | `PAWL-023-self-management.md` | **built** · `pawl install verify` / `upgrade` |
 | `PAWL-021-cli-coverage.md` | **built** · subprocess tests for the CLI seam |
-| `PAWL-022-closing-partial-criteria.md` | **built** · extends PAWL-003, PAWL-004, PAWL-006 |
+| `PAWL-022-closing-partial-criteria.md` | **retired** · its criteria folded back into PAWL-003, PAWL-004, PAWL-006 |
 | `PAWL-024-licensing-and-source-availability.md` | **built** · public source, proprietary licence · extends PAWL-013 |
 | `PAWL-025-security-posture.md` | **built** · pinning, scanning, fuzzing · extends PAWL-024 |
 | `PAWL-026-policy-input-validation.md` | **built** · rejects unusable thresholds · extends PAWL-006 |

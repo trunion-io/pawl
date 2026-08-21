@@ -1,9 +1,13 @@
 # PAWL-022 — Closing the partially-checkable criteria
 
-**Status:** DRAFTED, NOT BUILT · **Module:** `internal/e2e`
+**Status:** RETIRED — its eight criteria were folded back into the specs they
+referenced, once immutability moved to signature and those specs became
+editable. The tests it commissioned all still exist and run; only the
+indirection is gone. Kept as the record of why the tests were written.
+**Module:** `internal/e2e`
 **Extends:** [PAWL-003](./PAWL-003-coverage-resolution.md),
 [PAWL-004](./PAWL-004-reading-list.md),
-[PAWL-006](./PAWL-006-policy-gate.md) — all delivered and immutable.
+[PAWL-006](./PAWL-006-policy-gate.md) — none of them signed.
 
 ## Stakeholders
 
@@ -93,8 +97,9 @@ attestation count as evidence, shall be checked.
 - **The stale prose in the delivered specs.** They still name Python modules —
   `gitutil.DEFAULT_EXCLUDES`, `resolve._is_reviewable`, `policy.load_policy`,
   `evidence.load_junit`, `evidence.load_spec`. The port repointed `checkable:`
-  references but not these, and the immutability rule does not permit fixing
-  them. Recorded here so the next reader knows it is known.
+  references but not these, and the immutability rule did not permit fixing
+  them. **Now fixed** — all five sat on the very `checkable:` lines this spec's
+  criteria replaced, so retiring the indirection removed them.
 - **PAWL-006 AC6's workflow half.** That the attestation step runs before the
   gate step is a property of the CI job in `examples/`, not of pawl, and cannot
   be asserted from inside this repository.
