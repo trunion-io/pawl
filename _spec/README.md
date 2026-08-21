@@ -17,39 +17,62 @@ globs aimed at source trees. See
 
 ## Process — two rules, not negotiable
 
-**1. Spec first. Always.**
+**1. Spec first — for anything only a reader can catch.**
 
-Nothing lands without a spec that precedes it. Not code, not documentation, not
-a schema change, not a build change. If you are about to write something and
-there is no criterion it answers to, you are writing the spec — stop and write
-it properly.
+Nothing lands without a criterion it answers to, unless its failure is
+mechanical. The test is the one this directory already applies to every
+criterion, raised one level: `checkable`.
 
-"This isn't behaviour, so it doesn't need a spec" is not an exemption, it is the
-excuse that produced every unsigned reconstructed spec in this directory. The
-test is not *is it code*, it is *could this be wrong in a way somebody would
-have to catch by reading it*. Documentation fails that test constantly.
+- **Needs a spec** — behaviour, schema, and the delivered outputs. For a CLI the
+  documentation is an output, the same as the binary: `--help` drifting from
+  `docs/` is a defect in the delivered product, and no check catches it.
+- **Does not need a spec** — work that announces its own failure. A lint, a
+  measurement, a repointed reference. If it is wrong it goes red, and nobody has
+  to read it to find out.
 
-**2. Delivered specs are immutable.**
+"This isn't behaviour, so it doesn't need a spec" is still not an exemption — it
+is the excuse that produced every reconstructed spec in this directory. "This
+fails loudly on its own" is. The difference is whether a human has to read
+something to discover the error, which is the whole of what `checkable:`
+measures.
 
-A spec marked `delivered` is never amended, never edited, never "clarified". Its
-criteria are the contract that the delivered code was accepted against, and
-rewriting them retroactively changes what was agreed after the fact — which is
-the same failure as a claim edited to match the final code.
+**2. Signed specs are immutable.**
 
-To change or extend delivered behaviour, **write a new spec that references the
-delivered one**:
+A spec freezes when a required stakeholder signs it. From that moment its
+criteria are the contract the delivered code was accepted against: never
+amended, never edited, never "clarified". Rewriting them retroactively changes
+what was agreed after the fact, which is the same failure as a claim edited to
+match the final code.
+
+Until a spec is signed it is ordinary prose. Fix it in place.
+
+**Nothing in this directory is signed.** Every Stakeholders table reads
+*unsigned*, so nothing here is frozen today. That is not a backlog of missing
+signatures — it is an accurate statement that no contract has been formed yet.
+`delivered` and `built` describe how far the code got; they say nothing about
+what was agreed, and they no longer freeze anything.
+
+This rule earns its keep the moment a client signs, which is the whole reason it
+exists. Applying it before there is a counterparty bought nothing and cost the
+ability to correct a mistake in place — every correction had to be written into
+the next document instead, which is why the newest specs carry the longest
+revision histories.
+
+To change or extend a **signed** spec, write a new spec that references it:
 
 ```markdown
-**Extends:** PAWL-005 (delivered, immutable)
+**Extends:** PAWL-005 (signed, immutable)
 ```
 
 State plainly which criteria of the referenced spec still hold, which the new
 work supersedes, and which it leaves alone. The pair is then the contract.
 
-The only permitted edit to a delivered spec is repointing a `checkable:`
-reference when a check moves — a rename or a port. The criterion's *text* must
-not change. If you find yourself rewording a criterion during mechanical work,
-that is a decision and needs a new spec.
+The only permitted edit to a signed spec is repointing a `checkable:` reference
+when a check moves — a rename or a port. The criterion's *text* must not change.
+If you find yourself rewording a criterion during mechanical work, that is a
+decision and needs a new spec. PAWL-001 AC4 is the worked example: it pointed at
+`FileNotFoundError` in `claimlog.record`, a Python exception the Go port left
+behind, and was repointed at the Go test without the criterion changing.
 
 ## Format
 
@@ -57,8 +80,9 @@ Each spec is one file per unit of work, named `<KEY>-<slug>.md`, where the key i
 the tracker issue it came from. The parts that matter:
 
 - **Stakeholders** — named roles who sign. Product owns behaviour; the NFR
-  stakeholder (SRE, QA, security) owns the non-functional sections. A spec with
-  no NFR signature is a spec where nobody asked what happens under load.
+  stakeholder (SRE, QA, security) owns the non-functional sections. Signing is
+  where somebody asks what happens under load, and it is what freezes the spec
+  under rule 2. An unsigned spec is not defective; it is unfrozen.
 - **Acceptance criteria** — EARS form, one testable claim each, individually
   identified so a claim in the code can cite `spec:PAWL-003-AC2`.
 - **`checkable`** — the load-bearing field. Any criterion that cannot become a
