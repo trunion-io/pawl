@@ -345,3 +345,33 @@ func TestMigrateMovesRecordsAndOnlyThenRemovesTheLog(t *testing.T) {
 		t.Errorf("migration must be safe to re-run: %v", err)
 	}
 }
+
+// TestClaimAgainstAMissingFileIsRefused — PAWL-001 AC4.
+//
+// "If a claim names a file that does not exist, then the system shall refuse
+// the claim rather than record it."
+//
+// The criterion pointed at `FileNotFoundError in claimlog.record`, a Python
+// exception the Go port left behind — a reference that could never resolve.
+// Refusing is two obligations, and the second is the one worth asserting: the
+// call fails, and nothing reaches the store.
+func TestClaimAgainstAMissingFileIsRefused(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	before := len(loadClaims(t, repo))
+
+	_, err := claimlog.Record(repo, claimlog.Options{
+		Kind:      model.KindAssumption,
+		Text:      "a file nobody wrote",
+		Path:      "src/does_not_exist.py",
+		StartLine: 1,
+		EndLine:   2,
+	})
+	if err == nil {
+		t.Fatal("a claim naming a file that does not exist must be refused")
+	}
+
+	if after := len(loadClaims(t, repo)); after != before {
+		t.Errorf("claims in store = %d, want %d; the claim errored but was stored anyway", after, before)
+	}
+}

@@ -34,7 +34,7 @@ the system shall not interleave partial records.
 
 **AC4** — If a claim names a file that does not exist, then the system shall
 refuse the claim rather than record it.
-`checkable: yes` → `FileNotFoundError` in `claimlog.record`
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestClaimAgainstAMissingFileIsRefused`
 
 **AC5** — The system shall record the author role (agent, expert, client) on
 every claim.
