@@ -52,9 +52,11 @@ Other unblocked work, in rough order of value:
 
 All eight `checkable: partially` criteria in the delivered specs now have checks
 behind them, recorded in
-[`PAWL-022`](./_spec/PAWL-022-closing-partial-criteria.md). **The delivered
-specs still say `partially`** — they are immutable, so the checks are recorded
-by reference rather than edited in place. Grep will mislead you; read PAWL-022.
+[`PAWL-022`](./_spec/PAWL-022-closing-partial-criteria.md). **Those specs still
+say `partially`** — the checks were recorded by reference because delivered
+specs were immutable at the time. Grep will mislead you; read PAWL-022. Under the
+current rule those specs are unsigned and therefore editable, so repointing the
+eight fields in place is available work.
 
 If you write a new `checkable: partially`, close it in the same changeset. That
 field is where a criterion goes to be forgotten: two of these were found in a

@@ -1,7 +1,7 @@
 # PAWL-011 — Tool provenance in the attestation
 
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/attest`
-**Extends:** [PAWL-005](./PAWL-005-attestation.md) (delivered, immutable)
+**Extends:** [PAWL-005](./PAWL-005-attestation.md)
 
 ## Stakeholders
 

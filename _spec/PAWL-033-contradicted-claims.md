@@ -1,9 +1,9 @@
 # PAWL-033 — Contradicted claims
 
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/model`, `internal/policy`, `internal/cli`
-**Extends:** [PAWL-001](./PAWL-001-claim-capture.md) (delivered, immutable) —
+**Extends:** [PAWL-001](./PAWL-001-claim-capture.md) —
 changes what a claim can record, not how or when it is recorded.
-**Extends:** [PAWL-006](./PAWL-006-policy-gate.md) (delivered, immutable) — AC5
+**Extends:** [PAWL-006](./PAWL-006-policy-gate.md) — AC5
 below changes what its thresholds count.
 **Related:** [PAWL-003](./PAWL-003-coverage-resolution.md),
 [PAWL-007](./PAWL-007-calibration-sampler.md) (built), and constitution **C-10**.

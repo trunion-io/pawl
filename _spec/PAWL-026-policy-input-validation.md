@@ -1,7 +1,7 @@
 # PAWL-026 — Policy input validation
 
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/policy`
-**Extends:** [PAWL-006](./PAWL-006-policy-gate.md) (delivered, immutable) — that
+**Extends:** [PAWL-006](./PAWL-006-policy-gate.md) — that
 spec defines what the thresholds mean and what the gate does with them. This one
 defines what happens when the file does not contain a usable threshold. Nothing
 in PAWL-006 is altered.

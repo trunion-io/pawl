@@ -1,7 +1,7 @@
 # PAWL-012 — Configuration
 
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/config` (does not exist)
-**Extends:** [PAWL-006](./PAWL-006-policy-gate.md) (delivered, immutable)
+**Extends:** [PAWL-006](./PAWL-006-policy-gate.md)
 
 ## Stakeholders
 

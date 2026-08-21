@@ -28,8 +28,9 @@ diff:
 
 - a criterion must exist before the code does, and documentation is an output
   bound by the same rule
-- a delivered spec is immutable, so an edit to one is a defect even when the edit
-  is an improvement
+- a signed spec is immutable, so an edit to one is a defect even when the edit is
+  an improvement — and nothing is signed yet, so an edit to an unsigned spec is
+  not a finding
 - `go.mod` having no `require` block is an argument the distribution rests on,
   not a coincidence
 - tests build real git repositories, and a mock would be a violation rather than
@@ -53,8 +54,9 @@ is a finding, including for documentation and build configuration.
 `checkable: yes` (once built) — the rule most likely to be broken by a reviewer
 that assumes documentation is exempt.
 
-**AC3** — The skill shall state that a delivered spec is immutable and that an
-edit to one is a finding regardless of merit.
+**AC3** — The skill shall state that a signed spec is immutable and that an edit
+to one is a finding regardless of merit, and shall state that no spec is
+currently signed.
 `checkable: yes` (once built)
 
 **AC4** — The skill shall name the deliberate decisions that resemble defects,

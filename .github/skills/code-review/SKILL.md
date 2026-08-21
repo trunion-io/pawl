@@ -28,17 +28,28 @@ Neither was a bug. Both were findings.
 
 ## Rules a change can break
 
-**A criterion must exist before the code does.** Every change answers to a
-numbered criterion in [`_spec/`](../../../_spec). This includes documentation,
-build configuration and CI: for a CLI tool the documentation is an output, the
-same as the binary. "This isn't behaviour" is not an exemption. Code with no
-criterion is a finding.
+**A criterion must exist before the code does — where only a reader would catch
+the error.** Every such change answers to a numbered criterion in
+[`_spec/`](../../../_spec). This includes documentation, build configuration and
+CI: for a CLI tool the documentation is an output, the same as the binary.
+"This isn't behaviour" is not an exemption. Code with no criterion is a finding.
 
-**Delivered specs are immutable.** A spec marked delivered is never amended. A
-change extends it by reference with `**Extends:** PAWL-00N (delivered,
-immutable)`. **An edit to a delivered criterion is a finding regardless of
-merit** — including fixing something genuinely wrong in it. The only permitted
-edit is repointing a `checkable:` reference when a check moves.
+The exemption is mechanical failure, not category. A lint, a measurement, or a
+repointed `checkable:` reference needs no criterion, because it goes red on its
+own and nobody has to read it to find the error. If it can only be caught by
+reading, it needs a criterion.
+
+**Signed specs are immutable.** A spec freezes when a required stakeholder signs
+it, not when the code ships. A change extends a signed spec by reference with
+`**Extends:** PAWL-00N (signed, immutable)`. **An edit to a signed criterion is a
+finding regardless of merit** — including fixing something genuinely wrong in it.
+The only permitted edit is repointing a `checkable:` reference when a check
+moves.
+
+**No spec in this repository is signed.** Every Stakeholders table reads
+*unsigned*, so nothing is frozen: an unsigned spec is ordinary prose and is fixed
+in place. Do not raise a finding against an edit to one. `delivered` and `built`
+describe how far the code got and freeze nothing.
 
 **`go.mod` has no `require` block, and must not gain one.** This is the argument
 the distribution rests on — a supply-chain assurance tool that arrives with a

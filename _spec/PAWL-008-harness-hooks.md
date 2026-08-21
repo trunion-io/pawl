@@ -2,9 +2,9 @@
 
 **Status:** DRAFTED, NOT BUILT — **open question settled**
 **Module:** `hooks/` (does not exist), `internal/model`, `internal/claimlog`, `internal/policy`
-**Extends:** [PAWL-001](./PAWL-001-claim-capture.md) (delivered, immutable) —
-adds a record type alongside the claim; [PAWL-006](./PAWL-006-policy-gate.md)
-(delivered, immutable) — the gate gains a distinction it did not have.
+**Extends:** [PAWL-001](./PAWL-001-claim-capture.md) —
+adds a record type alongside the claim; [PAWL-006](./PAWL-006-policy-gate.md) —
+the gate gains a distinction it did not have.
 **Related:** [PAWL-007](./PAWL-007-calibration-sampler.md) samples what this
 produces. [PAWL-015](./PAWL-015-decision-capture.md) takes over rejected
 alternatives.

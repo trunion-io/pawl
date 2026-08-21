@@ -23,6 +23,12 @@ human attention.
 Delivered specs are immutable. So this records the checks rather than editing
 them in place, and the pair is the contract.
 
+> **Superseded by the rule change.** Immutability now attaches on signature
+> rather than on `delivered`, and no spec here is signed — so the three specs
+> this works around are ordinary prose and their `partially` fields can be
+> repointed in place. This spec stays as the record of what was done; retiring
+> the indirection is separate work.
+
 ## Context
 
 `checkable: partially` is where a criterion goes to be forgotten. Two of these

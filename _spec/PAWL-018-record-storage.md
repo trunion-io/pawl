@@ -1,7 +1,7 @@
 # PAWL-018 — Record storage and merge behaviour
 
 **Status:** DRAFTED, NOT BUILT · **Module:** `internal/claimlog`
-**Extends:** [PAWL-001](./PAWL-001-claim-capture.md) (delivered, immutable) —
+**Extends:** [PAWL-001](./PAWL-001-claim-capture.md) —
 changes where records live, not what a record is.
 
 ## Stakeholders
