@@ -568,3 +568,51 @@ func TestCheckReportsABrokenInstallation(t *testing.T) {
 			"otherwise a broken install is indistinguishable from a quiet one")
 	}
 }
+
+// TestInstallReportsTheChangeWithoutApplyingIt is PAWL-019 AC5. Install returns
+// a plan; nothing reaches disk until Apply. Nobody should have to trust a tool's
+// description of what it is about to do to their configuration.
+func TestInstallReportsTheChangeWithoutApplyingIt(t *testing.T) {
+	home := t.TempDir()
+	settings := harness.SettingsPath(home)
+
+	p, err := harness.Install(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Result) == 0 {
+		t.Error("the plan must report the settings it would write")
+	}
+	if _, err := os.Stat(settings); !os.IsNotExist(err) {
+		t.Fatalf("planning wrote %s; the report must not apply itself", settings)
+	}
+
+	if err := p.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(settings); err != nil {
+		t.Errorf("Apply did not write the settings it reported: %v", err)
+	}
+}
+
+// TestInstalledHookNeedsNoInterpreter is PAWL-019 AC9. pawl brings nothing with
+// it; a hook that needs a shell or a JSON processor installed quietly gives that
+// argument up.
+func TestInstalledHookNeedsNoInterpreter(t *testing.T) {
+	home := t.TempDir()
+	p, err := harness.Install(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(p.Result), "\n") {
+		if !strings.Contains(line, `"command"`) {
+			continue
+		}
+		for _, forbidden := range []string{"jq", "sh -c", "bash", "|", "&&", ";", "$("} {
+			if strings.Contains(line, forbidden) {
+				t.Errorf("installed command needs %q, so the hook depends on "+
+					"something pawl does not ship: %s", forbidden, strings.TrimSpace(line))
+			}
+		}
+	}
+}

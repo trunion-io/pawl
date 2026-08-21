@@ -46,50 +46,50 @@ rather than only by hand.
 
 **AC1** — The system shall provide a command that installs its hook
 configuration into the user's harness settings.
-`checkable: yes` (once built)
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstallPreservesEverythingItDidNotAdd`
 
 **AC2** — The system shall merge into existing settings and shall preserve every
 key and array entry it did not add.
-`checkable: yes` (once built) — **the criterion that matters most.** These are
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstallPreservesEverythingItDidNotAdd` — **the criterion that matters most.** These are
 the user's settings, not pawl's, and they will already contain hooks,
 permissions and preferences that pawl knows nothing about. A tool that
 clobbers an editor configuration will be uninstalled immediately and deserve it.
 
 **AC3** — Running the install twice shall leave the settings identical to
 running it once.
-`checkable: yes` (once built) — a hooks array that grows an entry per invocation
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstallIsIdempotent` — a hooks array that grows an entry per invocation
 is the obvious way to get this wrong.
 
 **AC4** — The system shall write a backup of the settings file before modifying
 it, and shall report where.
-`checkable: yes` (once built)
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstallBacksUpFirst`
 
 **AC5** — The system shall offer to report the exact change without applying it.
-`checkable: yes` (once built) — nobody should have to trust a tool's description
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstallReportsTheChangeWithoutApplyingIt` — nobody should have to trust a tool's description
 of what it is about to do to their configuration.
 
 **AC6** — The system shall provide the inverse operation, removing only what it
 added.
-`checkable: yes` (once built) — an install with no uninstall is a change the
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestUninstallRemovesOnlyOurs` — an install with no uninstall is a change the
 user cannot reverse without reading pawl's source.
 
 ### Behaviour once installed
 
 **AC7** — Where the edited file is not inside a repository containing a `.pawl`
 directory, the hook shall produce no output and exit zero.
-`checkable: yes` (once built) — user-level settings apply to *every* project.
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestHookIsSilentOutsideAPawlRepo` — user-level settings apply to *every* project.
 A hook that speaks in repositories not using pawl is noise, and one that runs
 work there is a tax on every edit the user makes anywhere.
 
 **AC8** — The hook shall determine the repository from the edited file's
 location, not from its own.
-`checkable: yes` (once built) — the current script derives the repository from
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestHookFindsTheRepoFromTheEditedFile` — the current script derives the repository from
 where it sits, which is why it can only work when copied into the repository it
 serves.
 
 **AC9** — The hook shall not require any interpreter, shell, or external command
 beyond pawl itself.
-`checkable: yes` (once built) — no `jq`, no bash. The distribution argument is
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstalledHookNeedsNoInterpreter` — no `jq`, no bash. The distribution argument is
 that pawl brings nothing with it; a hook that needs a JSON processor installed
 quietly gives that up.
 
@@ -97,26 +97,26 @@ quietly gives that up.
 
 **AC11** — The system shall resolve what to report in this order: a path given
 as an argument, then a payload on standard input, then the working tree.
-`checkable: yes` (once built) — every invocation does something useful. The
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestHookPrefersAnExplicitPath` — every invocation does something useful. The
 first version blocked forever when run at a prompt, and the first fix made it
 refuse outright; both treated "no input" as an error when it is simply the case
 with the most obvious default.
 
 **AC12** — Where standard input is a terminal, the system shall not wait for
 input.
-`checkable: yes` (once built) — a person running the command gets an answer, not
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestHookRefusesATerminal` — a person running the command gets an answer, not
 a blinking cursor.
 
 **AC13** — Where standard input is not a terminal and carries no usable payload,
 the system shall produce no output and exit zero.
-`checkable: yes` (once built) — a pipe with nothing readable on it is a harness
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestNonInteractiveWithNoPayloadStaysSilent` — a pipe with nothing readable on it is a harness
 call that went wrong, and AC10 governs that. The distinction between a person
 and a harness is observable, so the tool observes it rather than making the
 person guess.
 
 **AC16** — The system shall accept the directory to install into, defaulting to
 the user's home directory when none is given.
-`checkable: yes` (once built) — the default is what fixes the loading problem,
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstallHonoursAnExplicitDirectory` — the default is what fixes the loading problem,
 but a team that wants the configuration committed beside their repository should
 not have to hand-edit JSON to get it. This is also what makes the install
 testable against a temporary directory rather than against whoever is running
@@ -125,7 +125,7 @@ the suite.
 **AC17** — The system shall not present the harness entry point among its
 general commands, and shall state that its output follows the harness rather
 than being a pawl interface.
-`checkable: yes` (once built) — the shape of what it reads and writes is decided
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestHarnessEntryPointIsNotAGeneralCommand` — the shape of what it reads and writes is decided
 by a harness, not by pawl. Listing it beside `claim` and `gate` invites someone
 to script against it, and the next change to a harness protocol then breaks
 them. It is a diagnostic and an integration point, and the stable answer to
@@ -135,7 +135,7 @@ them. It is a diagnostic and an integration point, and the stable answer to
 
 **AC18** — The system shall install an absolute path to the running binary
 rather than a bare command name.
-`checkable: yes` (once built) — a bare `pawl` resolves only if pawl is on the
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstallWritesAnAbsolutePath` — a bare `pawl` resolves only if pawl is on the
 PATH the harness happens to hand its hooks, which is not the PATH of a login
 shell and not the one a direnv-scoped install provides. pawl knows exactly where
 it is at install time; guessing that the harness will find it later is the kind
@@ -143,13 +143,13 @@ of assumption that fails silently.
 
 **AC19** — When installing, the system shall run the command it is about to
 install and refuse to report success if it does not work.
-`checkable: yes` (once built) — an install that writes correct JSON naming a
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestCheckReportsABrokenInstallation` — an install that writes correct JSON naming a
 binary that cannot be found has done nothing, and said it succeeded.
 
 **AC20** — The system shall provide a way to check an existing installation,
 reporting whether the configuration is present *and* whether the command it
 names actually runs.
-`checkable: yes` (once built) — this is the diagnostic that was missing. AC10
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestCheckReportsABrokenInstallation` — this is the diagnostic that was missing. AC10
 requires the hook to stay silent on failure so it can never break an edit loop,
 and the cost of that is a broken installation being indistinguishable from a
 working one with nothing to say. Something has to be able to tell them apart,
@@ -157,7 +157,7 @@ and it must not be the hook itself.
 
 **AC21** — Where an entry pawl installed names a command different from the one
 it would install now, the system shall replace it.
-`checkable: yes` (once built) — otherwise idempotency becomes a trap: an
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstallRepairsAnOutdatedEntry` — otherwise idempotency becomes a trap: an
 existing broken entry is recognised as ours, skipped as "already installed", and
 never repaired. It also means moving or upgrading the binary silently leaves a
 configuration pointing at the old path. AC3 still holds — installing twice from
@@ -167,19 +167,19 @@ the same binary changes nothing.
 
 **AC14** — The system shall hold the harness configuration it installs as a
 single definition compiled into the binary.
-`checkable: yes` (once built) — assembling the JSON at the point of use spreads
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstalledConfigIsTheEmbeddedOne` — assembling the JSON at the point of use spreads
 the shape of a working configuration across code, documentation and whatever a
 user pasted from a README. One definition, shipped with the binary that
 implements it, cannot drift from itself.
 
 **AC15** — The system shall derive the marker it uses for idempotency and
 uninstall from that same definition.
-`checkable: yes` (once built) — a separately declared constant is a second
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestInstalledConfigIsTheEmbeddedOne` — a separately declared constant is a second
 source of truth for "which entry is ours", and the failure when they disagree is
 an uninstall that leaves the hook in place.
 
 **AC10** — Where anything fails, the hook shall exit zero and produce no output.
-`checkable: yes` (once built) — carried forward from PAWL-016 AC9 and now more
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestHookSurvivesGarbage` — carried forward from PAWL-016 AC9 and now more
 important, because a user-level hook fires on every edit in every project.
 
 ## Non-functional

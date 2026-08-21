@@ -357,3 +357,28 @@ func TestBlockedGateStillProducesEvidence(t *testing.T) {
 		t.Errorf("gate exit = %d, want 1 on violation", g.code)
 	}
 }
+
+// TestHarnessEntryPointIsNotAGeneralCommand is PAWL-019 AC17. Listing `hook`
+// beside `claim` and `gate` invites someone to script against it, and the next
+// change to a harness protocol then breaks them. Both halves of the criterion
+// are asserted: it is absent from the command list, and the help says whose
+// protocol its output follows.
+func TestHarnessEntryPointIsNotAGeneralCommand(t *testing.T) {
+	repo := newRepo(t)
+
+	for _, c := range commandsFromHelp(t, repo) {
+		if c == "hook" {
+			t.Error("hook is listed among the general commands; it is an " +
+				"integration point, and the stable answer is `pawl pending`")
+		}
+	}
+
+	help := run(t, repo, "-h").stdout
+	if !strings.Contains(help, "pawl pending") {
+		t.Error("help must point at the stable command it wants scripted instead")
+	}
+	if !strings.Contains(help, "harness") {
+		t.Error("help must state that the hook's output follows the harness " +
+			"protocol rather than being a pawl interface")
+	}
+}
