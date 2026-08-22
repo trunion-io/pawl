@@ -1449,3 +1449,89 @@ func containsSubstring(haystack []string, needle string) bool {
 	}
 	return false
 }
+
+// TestACorruptSurfacingCacheReadsAsNotSurfaced is PAWL-017 AC18's other half.
+// The absent case is covered above; corrupt is the one that bites in the wild,
+// because a half-written file after a crash looks like a file. Failing toward
+// silence would lose a pending set nobody ever sees again.
+func TestACorruptSurfacingCacheReadsAsNotSurfaced(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	spans := pending(t, repo)
+	if len(spans) == 0 {
+		t.Fatal("nothing pending to surface")
+	}
+
+	resolve.MarkSurfaced(repo, "src/auth.py", spans)
+	if !resolve.AlreadySurfaced(repo, "src/auth.py", spans) {
+		t.Fatal("precondition: the set should be marked surfaced")
+	}
+
+	// Overwrite every cache entry with garbage, as a crash mid-write would.
+	dir := filepath.Join(repo, ".pawl", ".cache")
+	entries, err := os.ReadDir(filepath.Join(dir, "surfaced"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("precondition: the cache should hold an entry")
+	}
+	for _, e := range entries {
+		mustWrite(t, filepath.Join(dir, "surfaced", e.Name()), "\x00not json{{")
+	}
+
+	if resolve.AlreadySurfaced(repo, "src/auth.py", spans) {
+		t.Error("a corrupt cache must fail toward speaking, not toward silence; " +
+			"a suppressed pending set is one nobody is told about")
+	}
+}
+
+// TestTheSurfacingCacheIsNeverCommitted is PAWL-017 AC16. Machine-local means
+// ignored: a committed cache would suppress another machine's first surfacing.
+// The cache's location is discovered rather than named, so moving it out from
+// under the ignore rule fails here instead of silently shipping it.
+func TestTheSurfacingCacheIsNeverCommitted(t *testing.T) {
+	repo := newRepo(t)
+	writeFeature(t, repo)
+	mustWrite(t, filepath.Join(repo, ".gitignore"), ".pawl/.cache/\n")
+	spans := pending(t, repo)
+
+	before := filesUnder(t, filepath.Join(repo, ".pawl"))
+	resolve.MarkSurfaced(repo, "src/auth.py", spans)
+	after := filesUnder(t, filepath.Join(repo, ".pawl"))
+
+	var cacheFiles []string
+	for f := range after {
+		if !before[f] {
+			cacheFiles = append(cacheFiles, f)
+		}
+	}
+	if len(cacheFiles) == 0 {
+		t.Fatal("MarkSurfaced wrote nothing; the test is not exercising the cache")
+	}
+
+	git(t, repo, "add", "-A")
+	staged := git(t, repo, "diff", "--cached", "--name-only")
+	for _, f := range cacheFiles {
+		if strings.Contains(staged, f) {
+			t.Errorf("the surfacing cache was staged: %s\nit must be machine-local, "+
+				"and .pawl/ as a whole is deliberately not ignored", f)
+		}
+	}
+}
+
+// filesUnder lists repo-relative paths below dir, as a set.
+func filesUnder(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	root := filepath.Dir(dir)
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		out[rel] = true
+		return nil
+	})
+	return out
+}

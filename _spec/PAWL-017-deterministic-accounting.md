@@ -49,18 +49,21 @@ is the high-volume half. Automating the second leaves the first untouched.
 
 **AC1** — Where a changed span matches a configured rule, the system shall record
 an acknowledgement for it without involving an agent.
-`checkable: yes` (once built)
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestRuleAcknowledgesAMatchingPath`
 
 **AC2** — The system shall apply only rules decidable from the repository
 contents alone, without judgement.
-`checkable: partially` — the rule *set* is inspectable; that each rule is
-genuinely decidable is a review judgement at the point one is added. Candidates
+`checkable: partially` → `test:trunion.io/pawl/internal/e2e.TestFormattingOnlyRuleUsesTheFingerprintNormalisation`
+covers the mechanical half — a formatting-only diff is provably non-semantic
+because pawl already normalises whitespace for fingerprints. The rule *set* is
+inspectable; that each rule is genuinely decidable is a review judgement at the
+point one is added. Candidates
 that qualify: path globs (generated code, vendored trees, lockfiles), and
 changes whose whitespace-normalised form is unchanged — pawl already normalises
 for fingerprints, so a formatting-only diff is provably non-semantic.
 
 **AC3** — The system shall never generate a claim by rule.
-`checkable: yes` (once built) — **the boundary this spec turns on.** A rule may
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestARuleCannotProduceAClaim` — **the boundary this spec turns on.** A rule may
 record that there was nothing to assume. A rule may never assert *what* was
 assumed, because it does not know, and a fabricated assumption is worse than an
 absent one. Acknowledgement is automatable precisely because it asserts nothing.
@@ -82,12 +85,12 @@ same reason gate thresholds are not (PAWL-012 AC4).
 
 **AC6** — The system shall record, for every claim and acknowledgement, whether
 it was produced by an agent, by a human, or by a named rule.
-`checkable: yes` (once built) — distinct from `author.role`, which says *who* the
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestRuleAcknowledgesAMatchingPath` — distinct from `author.role`, which says *who* the
 work is attributed to. This says *what mechanism* produced the record.
 
 **AC7** — Where a record was produced by a rule, the system shall record which
 rule produced it.
-`checkable: yes` (once built) — without it, a rule that turns out to be wrong
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestRuleAcknowledgesAMatchingPath` — without it, a rule that turns out to be wrong
 cannot be traced to the records it produced, and the corpus cannot be corrected.
 
 **AC8** — The system shall report the share of records produced by rule.
@@ -104,7 +107,7 @@ the hook round trip, and the edit that produced the span are three different
 numbers, and a corpus mixing them measures nothing.
 
 **AC10** — The system shall not read any recorded cost when evaluating the gate.
-`checkable: yes` (once built) — **load-bearing.** The moment cost influences a
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestGateIgnoresRecordedCost` — **load-bearing.** The moment cost influences a
 verdict, an agent is paid to claim less, and under-claiming is the failure the
 whole tool exists to catch.
 
@@ -141,7 +144,7 @@ turn, which is the only such signal a harness reliably exposes.
 
 **AC14** — The system shall not surface a pending set it has already surfaced
 unchanged.
-`checkable: yes` (once built)
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestSurfacingCacheSuppressesAnUnchangedRepeat`
 
 **AC15** — The system shall report the size of what it injects.
 `checkable: yes` (once built) — the overhead is a number somebody will ask about,
@@ -151,21 +154,21 @@ and measuring it is how AC12–AC14 stay honest rather than decaying back.
 
 **AC16** — The surfacing cache shall be machine-local and shall never be
 committed.
-`checkable: yes` (once built) — it is per-clone working state, not part of the
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestTheSurfacingCacheIsNeverCommitted` — it is per-clone working state, not part of the
 changeset. The claim and acknowledgement logs are the opposite and must be
 committed; conflating the two is how a repository ends up ignoring its own
 evidence.
 
 **AC17** — Deleting the cache shall not change any reading list, verdict, or gate
 outcome.
-`checkable: yes` (once built) — **the criterion that keeps the cache safe.** It
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestSurfacingCacheSuppressesAnUnchangedRepeat` — **the criterion that keeps the cache safe.** It
 is an ergonomics optimisation over *when a human or agent is told* something, and
 nothing more. The moment a verdict depends on it, a stale or absent cache changes
 what merges, and a machine-local file nobody reviews has become load-bearing.
 
 **AC18** — Where the cache is unreadable, corrupt or absent, the system shall
 behave as though nothing had been surfaced before.
-`checkable: yes` (once built) — failing toward speaking again is the safe
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestACorruptSurfacingCacheReadsAsNotSurfaced` — failing toward speaking again is the safe
 direction: the cost is a repeated message, where the opposite failure is silence
 about unaccounted code.
 
