@@ -1,0 +1,1 @@
+{"schema_version":"0.1","id":"e1d0e808a48b","ts":"2026-08-22T07:57:58.298939277Z","kind":"assumption","text":"Baseline lowered 130 to 118.","path":"_spec/.criteria-debt","start_line":1,"end_line":1,"fingerprint":"sha256:85daaf6f7055cd5736287faed9603d712920092c4f8fd0097ec3b650bf27530e","verified_by":[],"author":{"role":"agent","harness":"claude-code"},"origin":"agent"}

@@ -50,16 +50,16 @@ than a human ever could.
 
 **AC1** — The system shall require every commit merged to `main` to follow
 Conventional Commits.
-`checkable: yes` (once built)
+`checkable: yes` → `test:trunion.io/pawl/internal/release.TestParseCommitRejectsNonConventional`
 
 **AC2** — The system shall reject a commit whose type is not in the configured
 set.
-`checkable: yes` (once built)
+`checkable: yes` → `test:trunion.io/pawl/internal/release.TestEveryTypeIsKnown`
 
 **AC3** — The system shall require a commit that can alter a gate verdict to
 declare that it does, and shall treat such a commit as verdict-affecting when
 computing the version regardless of its type.
-`checkable: yes` (once built) — a `Verdict-Affecting: yes` trailer. `!`/`BREAKING
+`checkable: yes` → `test:trunion.io/pawl/internal/release.TestVerdictAffectingFixIsMajor` — a `Verdict-Affecting: yes` trailer. `!`/`BREAKING
 CHANGE` is not reused for this: it already means the command-line contract
 changed, and the two are genuinely different failures for a client. A flag that
 disappeared breaks their pipeline loudly; a threshold that moved does not.
@@ -86,28 +86,36 @@ either yes or no, and shall reject a commit that omits it.
 
 **AC5** — The system shall require every change to reach `main` through a pull
 request, and shall not permit a direct push.
-`checkable: yes` — already enforced; verified by an actual rejected push
-(`GH006 … Changes must be made through a pull request`).
+`checkable: partially` → `test:trunion.io/pawl/internal/release.TestRulesetEncodesTheContributionRules`
+holds the intended ruleset to this criterion; GitHub is the enforcement point
+and nothing in this tree proves what is live. Already enforced in practice —
+verified by an actual rejected push (`GH006 … Changes must be made through a
+pull request`).
 
 **AC6** — The system shall require the full check suite to pass before a pull
 request may merge, and shall apply that requirement to administrators.
-`checkable: yes` — enforced. PAWL-013 AC12 required the first half; extending it
-to administrators is what stops the rule being advisory in a repository with one
-of them.
+`checkable: partially` → `test:trunion.io/pawl/internal/release.TestRulesetEncodesTheContributionRules`
+holds the intended ruleset to this criterion, including that the only bypass is
+the single documented break-glass route. GitHub is the enforcement point and
+nothing in this tree proves what is live. PAWL-013 AC12 required the first half;
+extending it to administrators is what stops the rule being advisory in a
+repository with one of them.
 
 **AC7** — The system shall require linear history on `main`.
-`checkable: yes` — a version derived from commit history needs a history that
-reads in one order.
+`checkable: partially` → `test:trunion.io/pawl/internal/release.TestRulesetEncodesTheContributionRules`
+holds the intended ruleset to this criterion; GitHub is the enforcement point
+and nothing in this tree proves what is live. A version derived from commit
+history needs a history that reads in one order.
 
 ## Release candidates
 
 **AC8** — When the full check suite passes on `main`, the system shall tag that
 commit as a release candidate for the version the accumulated commits imply.
-`checkable: yes` (once built)
+`checkable: yes` → `test:trunion.io/pawl/internal/release.TestRCChecksMatchRuleset`
 
 **AC9** — The system shall number release candidates sequentially within a target
 version and shall not reuse a candidate number.
-`checkable: yes` (once built) — `v0.2.0-rc.1`, `v0.2.0-rc.2`.
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestRCReusesTheCandidateForTheSameCommit` — `v0.2.0-rc.1`, `v0.2.0-rc.2`.
 
 **AC10** — Where no commit since the last release implies a version change, the
 system shall create no release candidate.
@@ -137,24 +145,24 @@ tag to push is the same decision wearing a different hat, and this removes it.
 | any `fix`, `perf` | PATCH |
 | only `docs`, `test`, `ci`, `build`, `chore`, `refactor`, `style` | none |
 
-`checkable: yes` (once built) — the first row is the one that differs from every
+`checkable: yes` → `test:trunion.io/pawl/internal/release.TestBumpForCoversEveryRow` — the first row is the one that differs from every
 off-the-shelf implementation, and it is the whole reason this table is written
 out rather than delegated.
 
 **AC14** — While the major version is `0`, the system shall shift the bumps in
 AC13 down one position, so that a MAJOR bump moves MINOR.
-`checkable: yes` (once built) — PAWL-013 AC5 already requires this; stated here
+`checkable: yes` → `test:trunion.io/pawl/internal/release.TestPreOneZeroShiftsBumpsDown` — PAWL-013 AC5 already requires this; stated here
 because the tool implementing AC13 must implement it too, and every off-the-shelf
 one gets it wrong by treating pre-1.0 as unconstrained.
 
 **AC15** — The system shall refuse to release where the computed version already
 exists as a tag.
-`checkable: yes` (once built)
+`checkable: yes` → `test:trunion.io/pawl/internal/e2e.TestTagScriptRefusesAnExistingTagByDefault`
 
 **AC16** — The system shall publish release notes derived from the commits
 included in the release, grouped by type, naming verdict-affecting changes
 separately and first.
-`checkable: yes` (once built) — a client deciding whether to take an upgrade
+`checkable: yes` → `test:trunion.io/pawl/internal/release.TestNotesPutVerdictAffectingFirst` — a client deciding whether to take an upgrade
 cares about exactly one question first, and PAWL-013 AC2 says that question is
 whether verdicts move.
 
